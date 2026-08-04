@@ -1,0 +1,257 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Campaign {
+  id              String    @id @default(cuid())
+  name            String
+  description     String?
+  status          String    @default("draft") // draft | processing | paused | completed | failed | scheduled
+  sheetUrl        String?
+  sheetType       String    @default("google_sheets") // google_sheets | excel | csv
+  totalLeads      Int       @default(0)
+  processedLeads  Int       @default(0)
+  successCount    Int       @default(0)
+  failedCount     Int       @default(0)
+  approvedCount   Int       @default(0)
+  rejectedCount   Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  completedAt     DateTime?
+  scheduledAt     DateTime?
+  
+  // Scheduling
+  scheduleType    String?   // immediate | scheduled | recurring
+  recurrenceRule  String?   // Cron expression for recurring
+  
+  // Analytics
+  avgGenerationTime Int?
+  avgAiCost         Float?
+  
+  leads           Lead[]
+  posters         Poster[]
+  jobs            Job[]
+  messages        Message[]
+  logs            Log[]
+  branding        Branding?
+
+  @@map("campaigns")
+}
+
+model Lead {
+  id            String    @id @default(cuid())
+  campaignId    String
+  campaign      Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  // Raw data from sheet (all columns stored as JSON)
+  rawData       Json
+  
+  // Mapped fields (AI-detected)
+  name          String?
+  businessName  String?
+  email         String?
+  phone         String?
+  address       String?
+  city          String?
+  location      String?
+  ownerName     String?
+  company       String?
+  gst           String?
+  branch        String?
+  offer         String?
+  favoriteItem  String?
+  restaurantType String?
+  
+  // AI Business Intelligence
+  cuisine        String?   // Pizza, Biryani, Chinese, etc.
+  segment        String?   // premium | budget | mid_range
+  targetAudience String?   // family | youth | corporate | etc.
+  businessModel  String?   // cloud_kitchen | dine_in | delivery | etc.
+  
+  // Metadata
+  status        String    @default("pending") // pending | processing | completed | failed | approved | rejected
+  priority      Int       @default(0)
+  processedAt   DateTime?
+  errorMessage  String?
+  retryCount    Int       @default(0)
+  approvedAt    DateTime?
+  rejectedAt    DateTime?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([campaignId, status])
+  @@map("leads")
+}
+
+model Poster {
+  id          String    @id @default(cuid())
+  leadId      String
+  campaignId  String
+  campaign    Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  // Image paths
+  backgroundImageUrl String?
+  finalPosterUrl     String?
+  thumbnailUrl       String?
+  
+  // Generation details
+  prompt        String?
+  prompt_v2     String?
+  theme         String?
+  layout        String?   // premium_dark | luxury_gold | pizza | chinese | etc.
+  
+  // Status
+  status        String    @default("pending") // pending | generating | completed | failed | approved | rejected
+  errorMessage  String?
+  approvedAt    DateTime?
+  rejectedAt    DateTime?
+  
+  // AI-generated content
+  aiGeneratedOffer    String?
+  detectedFoodType    String?
+  suggestedTheme      String?
+  
+  // Quality metrics
+  qualityScore    Float?
+  qualityIssues   Json?
+  qualityRecommendations Json?
+  
+  // Variations
+  variationOf     String?  // Parent poster ID if this is a variation
+  isVariation     Boolean  @default(false)
+  
+  // Performance
+  generationTime  Int?     // Milliseconds
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([campaignId, status])
+  @@index([leadId])
+  @@map("posters")
+}
+
+model Message {
+  id           String    @id @default(cuid())
+  leadId       String
+  campaignId   String
+  campaign     Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  // WhatsApp details
+  toNumber     String
+  messageBody  String?
+  mediaUrl     String?
+  messageSid   String?  // Twilio SID or Meta message ID
+  
+  // AI-generated copy
+  aiGeneratedCopy String?
+  tone           String?  // professional | casual | friendly
+  
+  // Status
+  status       String    @default("pending") // pending | sent | delivered | read | failed | scheduled
+  errorMessage String?
+  
+  // Metadata
+  sentAt       DateTime?
+  scheduledAt  DateTime?
+  deliveredAt  DateTime?
+  readAt       DateTime?
+  
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([campaignId, status])
+  @@map("messages")
+}
+
+model Job {
+  id           String    @id @default(cuid())
+  campaignId   String
+  campaign     Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  // Job details
+  type         String    // process_lead | generate_poster | send_message | bulk_operation
+  leadId       String?
+  posterId     String?
+  bulkAction   String?   // approve | reject | regenerate | delete | export
+  
+  // Queue details
+  queueName    String
+  jobId        String  // BullMQ job ID
+  
+  // Status
+  status       String    @default("pending") // pending | active | completed | failed | delayed | cancelled
+  progress     Int      @default(0)
+  errorMessage String?
+  
+  // Timing
+  startedAt    DateTime?
+  completedAt  DateTime?
+  failedAt     DateTime?
+  
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([campaignId, status])
+  @@index([jobId])
+  @@map("jobs")
+}
+
+model Log {
+  id          String    @id @default(cuid())
+  campaignId  String?
+  leadId      String?
+  posterId    String?
+  campaign    Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  level       String    // info | warn | error | debug
+  category     String    // sheet | mapper | poster | whatsapp | queue | system | analytics
+  message     String
+  metadata    Json?
+  
+  createdAt   DateTime  @default(now())
+
+  @@index([campaignId, createdAt])
+  @@index([level])
+  @@index([posterId])
+  @@map("logs")
+}
+
+model Branding {
+  id              String    @id @default(cuid())
+  campaignId      String    @unique
+  campaign        Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  // Brand assets
+  logoUrl         String?
+  primaryColor    String?
+  secondaryColor  String?
+  fontFamily      String?
+  
+  // Social media
+  instagramHandle String?
+  facebookHandle  String?
+  websiteUrl      String?
+  
+  // QR Code
+  qrCodeData      String?   // URL or text for QR code
+  qrCodeUrl       String?
+  
+  // Delivery apps
+  deliveryApps    Json?     // Array of {name, url}
+  
+  // Custom messages
+  customMessage   String?
+  customCTA       String?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("branding")
+}
