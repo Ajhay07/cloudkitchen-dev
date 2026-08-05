@@ -38,8 +38,8 @@ const processLeadWorker = new Worker(
         data: { status: 'processing' },
       });
 
-      // Extract business info from raw data
-      const rawData = lead.rawData as Record<string, any>;
+      // Extract business info from raw data (stored as a JSON string — see schema.prisma)
+      const rawData = JSON.parse(lead.rawData) as Record<string, any>;
       
       // Use AI to map columns
       const headers = Object.keys(rawData);

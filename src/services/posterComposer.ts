@@ -162,11 +162,11 @@ export class PosterComposer {
 
   private escapeXml(text: string): string {
     return text
-      .replace(/&/g, '&')
-      .replace(/</g, '<')
-      .replace(/>/g, '>')
-      .replace(/"/g, '"')
-      .replace(/'/g, ''');
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
   }
 
   async addQRCode(imageBuffer: Buffer, qrData: string): Promise<Buffer> {

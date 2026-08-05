@@ -46,7 +46,7 @@ class Logger {
           level,
           category,
           message,
-          metadata: metadata as any,
+          metadata: metadata ? JSON.stringify(metadata) : null,
         },
       });
     } catch (error) {

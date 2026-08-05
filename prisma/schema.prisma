@@ -48,8 +48,10 @@ model Lead {
   campaignId    String
   campaign      Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   
-  // Raw data from sheet (all columns stored as JSON)
-  rawData       Json
+  // Raw data from sheet (all columns stored as JSON) — String, not Json:
+  // SQLite's Prisma connector doesn't support the Json type. Stored as a
+  // JSON.stringify'd string; callers must JSON.parse on read.
+  rawData       String
   
   // Mapped fields (AI-detected)
   name          String?
@@ -119,8 +121,8 @@ model Poster {
   
   // Quality metrics
   qualityScore    Float?
-  qualityIssues   Json?
-  qualityRecommendations Json?
+  qualityIssues   String? // JSON.stringify'd — see rawData's comment above for why not Json
+  qualityRecommendations String? // JSON.stringify'd — see rawData's comment above for why not Json
   
   // Variations
   variationOf     String?  // Parent poster ID if this is a variation
@@ -213,7 +215,7 @@ model Log {
   level       String    // info | warn | error | debug
   category     String    // sheet | mapper | poster | whatsapp | queue | system | analytics
   message     String
-  metadata    Json?
+  metadata    String? // JSON.stringify'd — see Lead.rawData's comment for why not Json
   
   createdAt   DateTime  @default(now())
 
@@ -244,7 +246,7 @@ model Branding {
   qrCodeUrl       String?
   
   // Delivery apps
-  deliveryApps    Json?     // Array of {name, url}
+  deliveryApps    String?   // Array of {name, url}, JSON.stringify'd — see Lead.rawData's comment for why not Json
   
   // Custom messages
   customMessage   String?

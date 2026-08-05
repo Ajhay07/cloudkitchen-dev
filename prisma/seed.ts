@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { logger } from '../../src/lib/logger';
+import { logger } from '../src/lib/logger';
 
 const prisma = new PrismaClient();
 
@@ -61,7 +61,7 @@ async function main() {
 
   for (const lead of leads) {
     await prisma.lead.create({
-      data: lead,
+      data: { ...lead, rawData: JSON.stringify(lead.rawData) },
     });
   }
 
@@ -75,14 +75,14 @@ async function main() {
         level: 'info',
         category: 'system',
         message: 'Database seeded successfully',
-        metadata: { campaignName: campaign.name },
+        metadata: JSON.stringify({ campaignName: campaign.name }),
       },
       {
         campaignId: campaign.id,
         level: 'info',
         category: 'sheet',
         message: 'Sample campaign created with 3 leads',
-        metadata: { totalLeads: 3 },
+        metadata: JSON.stringify({ totalLeads: 3 }),
       },
     ],
   });

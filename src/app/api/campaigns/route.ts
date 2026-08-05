@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
       await prisma.lead.create({
         data: {
           campaignId: campaign.id,
-          rawData: row as any,
+          rawData: JSON.stringify(row),
         },
       });
     }
