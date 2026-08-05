@@ -1,5 +1,4 @@
-import OpenAI from 'openai';
-import { logger, LogLevel } from '@/lib/logger';
+import { logger } from '@/lib/logger';
 
 export interface MappedLead {
   name?: string;
@@ -24,58 +23,87 @@ interface ColumnMapping {
   confidence: number;
 }
 
-export class ColumnMapper {
-  private openai: OpenAI;
+const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-  constructor() {
-    this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
+/** Swapped from OpenAI to Gemini — same shape of calls (system + user prompt, optional JSON schema). */
+async function callGemini(params: {
+  systemInstruction: string;
+  prompt: string;
+  responseSchema?: Record<string, unknown>;
+  temperature?: number;
+  maxOutputTokens?: number;
+}): Promise<string> {
+  const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
+  if (!apiKey) throw new Error('GOOGLE_GEMINI_API_KEY is not configured');
+
+  const body: Record<string, unknown> = {
+    systemInstruction: { parts: [{ text: params.systemInstruction }] },
+    contents: [{ role: 'user', parts: [{ text: params.prompt }] }],
+    generationConfig: {
+      temperature: params.temperature ?? 0.2,
+      maxOutputTokens: params.maxOutputTokens ?? 1024,
+      ...(params.responseSchema
+        ? { responseMimeType: 'application/json', responseSchema: params.responseSchema }
+        : {}),
+    },
+  };
+
+  const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Gemini API error (${res.status}): ${errText.slice(0, 300)}`);
   }
 
+  const data = await res.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (typeof text !== 'string') {
+    throw new Error('Gemini response missing expected text content');
+  }
+  return text;
+}
+
+export class ColumnMapper {
   async mapColumns(headers: string[], sampleRow: Record<string, any>): Promise<ColumnMapping[]> {
     try {
       logger.info('mapper', 'Analyzing columns with AI', { headers });
 
       const prompt = this.buildPrompt(headers, sampleRow);
 
-      const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert at analyzing spreadsheet data and identifying field mappings for a restaurant marketing system. Map columns to standardized field names.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        response_format: { type: 'json_schema', json_schema: {
-          type: 'object',
+      const text = await callGemini({
+        systemInstruction:
+          'You are an expert at analyzing spreadsheet data and identifying field mappings for a restaurant marketing system. Map columns to standardized field names.',
+        prompt,
+        responseSchema: {
+          type: 'OBJECT',
           properties: {
             mappings: {
-              type: 'array',
+              type: 'ARRAY',
               items: {
-                type: 'object',
+                type: 'OBJECT',
                 properties: {
-                  field: { type: 'string' },
-                  matchedColumns: { type: 'array', items: { type: 'string' } },
-                  confidence: { type: 'number' }
+                  field: { type: 'STRING' },
+                  matchedColumns: { type: 'ARRAY', items: { type: 'STRING' } },
+                  confidence: { type: 'NUMBER' },
                 },
-                required: ['field', 'matchedColumns', 'confidence']
-              }
-            }
+                required: ['field', 'matchedColumns', 'confidence'],
+              },
+            },
           },
-          required: ['mappings']
-        }},
+          required: ['mappings'],
+        },
         temperature: 0.1,
       });
 
-      const result = JSON.parse(response.choices[0].message.content || '{}');
+      const result = JSON.parse(text || '{}');
       logger.info('mapper', 'Column mapping completed', { mappings: result.mappings });
 
-      return result.mappings;
+      return result.mappings ?? [];
     } catch (error) {
       logger.error('mapper', 'Failed to map columns', { error, headers });
       throw error;
@@ -152,17 +180,14 @@ Generate ONE short, punchy offer (max 20 words). Examples:
 
 Return only the offer text, no quotes or explanation.`;
 
-      const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: 'You are a marketing expert for restaurants. Generate short, compelling offers.' },
-          { role: 'user', content: prompt },
-        ],
-        max_tokens: 50,
+      const text = await callGemini({
+        systemInstruction: 'You are a marketing expert for restaurants. Generate short, compelling offers.',
+        prompt,
+        maxOutputTokens: 50,
         temperature: 0.8,
       });
 
-      const offer = response.choices[0].message.content?.trim() || 'Flat 20% OFF';
+      const offer = text.trim() || 'Flat 20% OFF';
       logger.info('mapper', 'Generated missing offer', { offer, businessName });
       return offer;
     } catch (error) {
@@ -182,17 +207,14 @@ Possible types: Pizza, Biryani, Bakery, Chinese, South Indian, Burger, Chinese, 
 
 Return only the type name, or "General" if unclear.`;
 
-      const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: 'You are a restaurant classification expert. Identify cuisine/business type.' },
-          { role: 'user', content: prompt },
-        ],
-        max_tokens: 20,
+      const text = await callGemini({
+        systemInstruction: 'You are a restaurant classification expert. Identify cuisine/business type.',
+        prompt,
+        maxOutputTokens: 20,
         temperature: 0.3,
       });
 
-      const type = response.choices[0].message.content?.trim();
+      const type = text.trim();
       logger.info('mapper', 'Detected restaurant type', { type, businessName });
       return type && type !== 'General' ? type : undefined;
     } catch (error) {

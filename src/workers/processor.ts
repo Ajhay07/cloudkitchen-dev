@@ -167,9 +167,9 @@ const generatePosterWorker = new Worker(
         backgroundImageUrl: generatedImage.url,
         businessName: lead.businessName || 'Restaurant',
         offer: lead.offer || 'Flat 20% OFF',
-        address: lead.address,
-        phone: lead.phone,
-        customerName: lead.name,
+        address: lead.address || undefined,
+        phone: lead.phone || undefined,
+        customerName: lead.name || undefined,
         theme: posterPrompt.theme,
       });
 

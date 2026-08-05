@@ -87,6 +87,8 @@ model Lead {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  posters       Poster[]
+
   @@index([campaignId, status])
   @@map("leads")
 }
@@ -94,6 +96,7 @@ model Lead {
 model Poster {
   id          String    @id @default(cuid())
   leadId      String
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
   campaignId  String
   campaign    Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   
