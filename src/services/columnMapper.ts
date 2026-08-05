@@ -23,7 +23,10 @@ interface ColumnMapping {
   confidence: number;
 }
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
+// 'gemini-2.0-flash' was retired by Google (confirmed via live 404 while
+// testing this app). Using the rolling "-latest" alias instead of a pinned
+// version so this doesn't silently break again on the next model retirement.
+const GEMINI_MODEL = 'gemini-flash-latest';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 /** Swapped from OpenAI to Gemini — same shape of calls (system + user prompt, optional JSON schema). */
