@@ -1,6 +1,7 @@
-import { Queue } from 'bullmq';
+import { Queue, QueueEvents } from 'bullmq';
 import { logger } from '@/lib/logger';
 import prisma from '@/lib/prisma';
+import { redisConnection } from '@/lib/redis';
 
 export interface JobData {
   campaignId: string;
@@ -16,7 +17,7 @@ class QueueService {
 
   constructor() {
     this.processQueue = new Queue('process-lead', {
-      connection: { host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379') },
+      connection: redisConnection,
       defaultJobOptions: {
         attempts: 3,
         backoff: {
@@ -29,7 +30,7 @@ class QueueService {
     });
 
     this.posterQueue = new Queue('generate-poster', {
-      connection: { host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379') },
+      connection: redisConnection,
       defaultJobOptions: {
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
@@ -39,7 +40,7 @@ class QueueService {
     });
 
     this.messageQueue = new Queue('send-message', {
-      connection: { host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379') },
+      connection: redisConnection,
       defaultJobOptions: {
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
@@ -52,13 +53,17 @@ class QueueService {
   }
 
   private setupEventListeners() {
-    const queues = [this.processQueue, this.posterQueue, this.messageQueue];
-    queues.forEach(queue => {
-      queue.on('completed', (job: any) => {
-        logger.info('queue', `Job completed: ${job.id}`, { type: job.data.type });
+    // Queue itself doesn't emit job lifecycle events (completed/failed) — that
+    // requires a separate QueueEvents instance subscribed via Redis pub/sub.
+    // The previous queue.on('completed'/'failed') calls were silently dead code.
+    const queueNames = ['process-lead', 'generate-poster', 'send-message'];
+    queueNames.forEach((name) => {
+      const events = new QueueEvents(name, { connection: redisConnection });
+      events.on('completed', ({ jobId }) => {
+        logger.info('queue', `Job completed: ${jobId}`, { queue: name });
       });
-      queue.on('failed', (job: any, err: any) => {
-        logger.error('queue', `Job failed: ${job?.id}`, { error: err.message, type: job?.data.type });
+      events.on('failed', ({ jobId, failedReason }) => {
+        logger.error('queue', `Job failed: ${jobId}`, { queue: name, error: failedReason });
       });
     });
   }

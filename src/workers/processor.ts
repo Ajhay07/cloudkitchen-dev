@@ -8,6 +8,7 @@ import { ImageGenerator } from '@/services/imageGenerator';
 import { PosterComposer } from '@/services/posterComposer';
 import { WhatsAppSender } from '@/services/whatsappSender';
 import queueService from '@/services/queue';
+import { redisConnection } from '@/lib/redis';
 
 const sheetReader = new SheetReader();
 const columnMapper = new ColumnMapper();
@@ -117,7 +118,7 @@ const processLeadWorker = new Worker(
     }
   },
   {
-    connection: { host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379') },
+    connection: redisConnection,
     concurrency: 5,
   }
 );
@@ -239,7 +240,7 @@ const generatePosterWorker = new Worker(
     }
   },
   {
-    connection: { host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379') },
+    connection: redisConnection,
     concurrency: 3,
   }
 );
@@ -321,7 +322,7 @@ const sendMessageWorker = new Worker(
     }
   },
   {
-    connection: { host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379') },
+    connection: redisConnection,
     concurrency: 10,
   }
 );
