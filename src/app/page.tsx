@@ -164,7 +164,11 @@ export default function Dashboard() {
     if (!selectedCampaign) return;
     setLoading(true);
     try {
-      await fetch(`/api/campaigns/${selectedCampaign.id}/start`, { method: 'POST' });
+      await fetch(`/api/campaigns/${selectedCampaign.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start' }),
+      });
       await fetchCampaigns();
     } catch (error) {
       logger.error('dashboard', 'Failed to start campaign', { error });
@@ -176,7 +180,11 @@ export default function Dashboard() {
   const handlePauseCampaign = async () => {
     if (!selectedCampaign) return;
     try {
-      await fetch(`/api/campaigns/${selectedCampaign.id}/pause`, { method: 'POST' });
+      await fetch(`/api/campaigns/${selectedCampaign.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'pause' }),
+      });
       await fetchCampaigns();
     } catch (error) {
       logger.error('dashboard', 'Failed to pause campaign', { error });

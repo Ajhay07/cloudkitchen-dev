@@ -1,4 +1,4 @@
-import XLSX from 'xlsx';
+import * as XLSX from 'xlsx';
 import { google } from 'googleapis';
 import { Readable } from 'stream';
 import { logger, LogLevel } from '@/lib/logger';
