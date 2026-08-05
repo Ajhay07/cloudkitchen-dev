@@ -1,32 +1,30 @@
-import IORedis from 'ioredis';
+import type { ConnectionOptions } from 'bullmq';
 
 /**
  * REDIS_URL was documented (.env.example, README, SETUP.md) but never
  * actually wired up — every BullMQ Queue/Worker hardcoded
- * REDIS_HOST/REDIS_PORT (undocumented, defaulting to localhost:6379)
- * instead. This is the single shared connection every queue/worker now uses.
+ * REDIS_HOST/REDIS_PORT (undocumented, defaulting to localhost:6379).
+ *
+ * This exports connection OPTIONS, not a shared ioredis instance — BullMQ
+ * internally calls `.duplicate()` on whatever connection it's given (for its
+ * blocking/subscriber clients), and against this Upstash instance the
+ * duplicated connection connects but never responds to any command (hangs
+ * forever — verified directly). Passing plain options instead means BullMQ
+ * creates its own fresh ioredis connections per Queue/Worker rather than
+ * duplicating a pre-existing one, which avoids the hang entirely.
  */
-function buildRedisUrl(): string {
-  if (process.env.REDIS_URL) return process.env.REDIS_URL;
-  const host = process.env.REDIS_HOST || 'localhost';
-  const port = process.env.REDIS_PORT || '6379';
-  return `redis://${host}:${port}`;
+function parseRedisUrl(): ConnectionOptions {
+  const raw = process.env.REDIS_URL || `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || '6379'}`;
+  const url = new URL(raw);
+
+  return {
+    host: url.hostname,
+    port: Number(url.port || 6379),
+    username: url.username || undefined,
+    password: url.password || undefined,
+    tls: url.protocol === 'rediss:' ? {} : undefined,
+    maxRetriesPerRequest: null, // required by BullMQ Workers
+  };
 }
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __redisConnection: IORedis | undefined;
-}
-
-// Reused across hot-reloads in dev, and shared by every Queue/Worker/QueueEvents
-// instance in the app rather than each opening its own connection.
-export const redisConnection: IORedis =
-  global.__redisConnection ??
-  new IORedis(buildRedisUrl(), {
-    // Required by BullMQ Workers — see https://docs.bullmq.io/guide/going-to-production#maxretriesperrequest
-    maxRetriesPerRequest: null,
-  });
-
-if (process.env.NODE_ENV !== 'production') {
-  global.__redisConnection = redisConnection;
-}
+export const redisConnection: ConnectionOptions = parseRedisUrl();
