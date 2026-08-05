@@ -1,4 +1,4 @@
-import { Queue, QueueEvents } from 'bullmq';
+import { Queue } from 'bullmq';
 import { logger } from '@/lib/logger';
 import prisma from '@/lib/prisma';
 import { redisConnection } from '@/lib/redis';
@@ -53,19 +53,17 @@ class QueueService {
   }
 
   private setupEventListeners() {
-    // Queue itself doesn't emit job lifecycle events (completed/failed) — that
-    // requires a separate QueueEvents instance subscribed via Redis pub/sub.
-    // The previous queue.on('completed'/'failed') calls were silently dead code.
-    const queueNames = ['process-lead', 'generate-poster', 'send-message'];
-    queueNames.forEach((name) => {
-      const events = new QueueEvents(name, { connection: redisConnection });
-      events.on('completed', ({ jobId }) => {
-        logger.info('queue', `Job completed: ${jobId}`, { queue: name });
-      });
-      events.on('failed', ({ jobId, failedReason }) => {
-        logger.error('queue', `Job failed: ${jobId}`, { queue: name, error: failedReason });
-      });
-    });
+    // Disabled: QueueEvents.waitUntilReady() never resolves against this
+    // Upstash Redis instance (verified directly — it hangs indefinitely,
+    // apparently a Streams-related incompatibility), and worse, attempting
+    // to create one blocks the app's actual Queue.add() calls too. The
+    // original code here (queue.on('completed'/'failed')) was ALSO broken
+    // (wrong BullMQ API — Queue doesn't emit those events), so this was
+    // already non-functional before; removing it doesn't regress a working
+    // feature. Job completion/failure is still fully tracked via the `Job`
+    // table (see createJobRecord) and each worker's own try/catch logging
+    // in src/workers/processor.ts — this was purely supplemental console
+    // logging.
   }
 
   async addProcessLeadJob(campaignId: string, leadId: string) {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Upload, Play, Pause, Trash2, Download, RefreshCw, BarChart3, Users, Image as ImageIcon, MessageSquare, CheckCircle, XCircle, Clock } from 'lucide-react';
-import { logger } from '@/lib/logger';
+
 
 interface Campaign {
   id: string;
@@ -68,7 +68,7 @@ export default function Dashboard() {
       const failed = data.filter((c: Campaign) => c.status === 'failed').length;
       setStats({ total, processing, completed, failed });
     } catch (error) {
-      logger.error('dashboard', 'Failed to fetch campaigns', { error });
+      console.error('[dashboard]', 'Failed to fetch campaigns', { error });
     }
   };
 
@@ -98,7 +98,7 @@ export default function Dashboard() {
       await fetchCampaigns();
       setSelectedCampaign(campaign);
     } catch (error) {
-      logger.error('dashboard', 'Failed to create campaign', { error });
+      console.error('[dashboard]', 'Failed to create campaign', { error });
       alert('Failed to create campaign');
     } finally {
       setUploading(false);
@@ -127,7 +127,7 @@ export default function Dashboard() {
       await fetchCampaigns();
       setSelectedCampaign(campaign);
     } catch (error) {
-      logger.error('dashboard', 'Failed to upload file', { error });
+      console.error('[dashboard]', 'Failed to upload file', { error });
       alert('Failed to upload file');
     } finally {
       setUploading(false);
@@ -146,7 +146,7 @@ export default function Dashboard() {
       const data = await response.json();
       setLeads(data);
     } catch (error) {
-      logger.error('dashboard', 'Failed to fetch leads', { error });
+      console.error('[dashboard]', 'Failed to fetch leads', { error });
     }
   };
 
@@ -156,7 +156,7 @@ export default function Dashboard() {
       const data = await response.json();
       setPosters(data);
     } catch (error) {
-      logger.error('dashboard', 'Failed to fetch posters', { error });
+      console.error('[dashboard]', 'Failed to fetch posters', { error });
     }
   };
 
@@ -171,7 +171,7 @@ export default function Dashboard() {
       });
       await fetchCampaigns();
     } catch (error) {
-      logger.error('dashboard', 'Failed to start campaign', { error });
+      console.error('[dashboard]', 'Failed to start campaign', { error });
     } finally {
       setLoading(false);
     }
@@ -187,7 +187,7 @@ export default function Dashboard() {
       });
       await fetchCampaigns();
     } catch (error) {
-      logger.error('dashboard', 'Failed to pause campaign', { error });
+      console.error('[dashboard]', 'Failed to pause campaign', { error });
     }
   };
 
