@@ -10,8 +10,8 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts",
-    "worker": "tsx workers/processor.ts",
+    "db:seed": "tsx --env-file=.env.local prisma/seed.ts",
+    "worker": "tsx --env-file=.env.local src/workers/processor.ts",
     "test": "jest"
   },
   "dependencies": {
