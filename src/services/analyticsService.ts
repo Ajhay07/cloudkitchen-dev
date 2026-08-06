@@ -166,7 +166,7 @@ export class AnalyticsService {
         totalMessages,
         avgSuccessRate: Math.round(successRate * 100) / 100,
         topCuisines,
-        recentCampaigns: campaigns,
+        recentCampaigns: campaigns.map((c) => ({ ...c, createdAt: c.createdAt.toISOString() })),
       };
     } catch (error) {
       logger.error('analytics', 'Failed to get global analytics', { error });

@@ -55,7 +55,7 @@ export class ImageGenerator {
         style: 'vivid',
       });
 
-      const url = response.data[0].url!;
+      const url = response.data![0].url!;
       logger.info('image', 'Image generated with OpenAI', { url });
 
       return {

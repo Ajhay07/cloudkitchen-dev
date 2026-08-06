@@ -34,6 +34,11 @@ interface Poster {
   finalPosterUrl?: string;
   status: string;
   theme?: string;
+  lead?: {
+    name?: string;
+    businessName?: string;
+    phone?: string;
+  };
 }
 
 export default function Dashboard() {
@@ -49,12 +54,25 @@ export default function Dashboard() {
   const [campaignName, setCampaignName] = useState('');
   const [sheetUrl, setSheetUrl] = useState('');
   const [uploadType, setUploadType] = useState<'url' | 'file'>('url');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [activeTab, setActiveTab] = useState<'leads' | 'posters' | 'logs'>('leads');
+  const [posterActionLoading, setPosterActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCampaigns();
     const interval = setInterval(fetchCampaigns, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!selectedCampaign) return;
+    const interval = setInterval(() => {
+      fetchLeads(selectedCampaign.id);
+      fetchPosters(selectedCampaign.id);
+    }, 5000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCampaign?.id]);
 
   const fetchCampaigns = async () => {
     try {
@@ -74,15 +92,24 @@ export default function Dashboard() {
 
   const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (uploadType === 'file' && !selectedFile) {
+      alert('Please choose a file to upload');
+      return;
+    }
+
     setUploading(true);
 
     try {
       const formData = new FormData();
       formData.append('name', campaignName);
-      formData.append('sheetType', uploadType === 'url' ? 'google_sheets' : 'excel');
-      
+
       if (uploadType === 'url') {
+        formData.append('sheetType', 'google_sheets');
         formData.append('sheetUrl', sheetUrl);
+      } else if (selectedFile) {
+        formData.append('sheetType', selectedFile.name.endsWith('.csv') ? 'csv' : 'excel');
+        formData.append('file', selectedFile);
       }
 
       const response = await fetch('/api/campaigns', {
@@ -95,6 +122,7 @@ export default function Dashboard() {
       const campaign = await response.json();
       setCampaignName('');
       setSheetUrl('');
+      setSelectedFile(null);
       await fetchCampaigns();
       setSelectedCampaign(campaign);
     } catch (error) {
@@ -105,33 +133,8 @@ export default function Dashboard() {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('name', campaignName || 'Uploaded Campaign');
-      formData.append('file', file);
-      formData.append('sheetType', file.name.endsWith('.csv') ? 'csv' : 'excel');
-
-      const response = await fetch('/api/campaigns', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) throw new Error('Failed to upload file');
-
-      const campaign = await response.json();
-      await fetchCampaigns();
-      setSelectedCampaign(campaign);
-    } catch (error) {
-      console.error('[dashboard]', 'Failed to upload file', { error });
-      alert('Failed to upload file');
-    } finally {
-      setUploading(false);
-    }
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSelectedFile(e.target.files?.[0] || null);
   };
 
   const handleSelectCampaign = async (campaign: Campaign) => {
@@ -147,6 +150,37 @@ export default function Dashboard() {
       setLeads(data);
     } catch (error) {
       console.error('[dashboard]', 'Failed to fetch leads', { error });
+    }
+  };
+
+  const handlePosterAction = async (posterId: string, action: 'approve' | 'reject' | 'regenerate') => {
+    if (!selectedCampaign) return;
+    setPosterActionLoading(posterId);
+    try {
+      await fetch(`/api/campaigns/${selectedCampaign.id}/posters`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ posterId, action }),
+      });
+      await fetchPosters(selectedCampaign.id);
+    } catch (error) {
+      console.error('[dashboard]', `Failed to ${action} poster`, { error });
+    } finally {
+      setPosterActionLoading(null);
+    }
+  };
+
+  const handleUpdateLeadOffer = async (leadId: string, offer: string) => {
+    if (!selectedCampaign) return;
+    setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, offer } : l)));
+    try {
+      await fetch(`/api/campaigns/${selectedCampaign.id}/leads`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId, offer }),
+      });
+    } catch (error) {
+      console.error('[dashboard]', 'Failed to update lead offer', { error });
     }
   };
 
@@ -304,7 +338,7 @@ export default function Dashboard() {
                     <input
                       type="file"
                       accept=".xlsx,.xls,.csv"
-                      onChange={handleFileUpload}
+                      onChange={handleFileSelect}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
                     />
                   </div>
@@ -413,52 +447,147 @@ export default function Dashboard() {
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
                   <div className="border-b border-gray-200 dark:border-gray-700">
                     <nav className="flex -mb-px">
-                      <button className="px-6 py-3 border-b-2 border-blue-500 text-blue-600 font-medium">
+                      <button
+                        onClick={() => setActiveTab('leads')}
+                        className={`px-6 py-3 border-b-2 font-medium ${activeTab === 'leads' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                      >
                         Leads ({leads.length})
                       </button>
-                      <button className="px-6 py-3 border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+                      <button
+                        onClick={() => setActiveTab('posters')}
+                        className={`px-6 py-3 border-b-2 font-medium ${activeTab === 'posters' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                      >
                         Posters ({posters.length})
-                      </button>
-                      <button className="px-6 py-3 border-b-2 border-transparent text-gray-500 hover:text-gray-700">
-                        Logs
+                        {posters.some((p) => p.status === 'pending_approval') && (
+                          <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-800">
+                            {posters.filter((p) => p.status === 'pending_approval').length} need review
+                          </span>
+                        )}
                       </button>
                     </nav>
                   </div>
 
                   <div className="p-6">
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-gray-200 dark:border-gray-700">
-                            <th className="text-left py-2 px-2">Name</th>
-                            <th className="text-left py-2 px-2">Business</th>
-                            <th className="text-left py-2 px-2">Phone</th>
-                            <th className="text-left py-2 px-2">Offer</th>
-                            <th className="text-left py-2 px-2">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {leads.map((lead) => (
-                            <tr key={lead.id} className="border-b border-gray-100 dark:border-gray-700">
-                              <td className="py-2 px-2">{lead.name || '-'}</td>
-                              <td className="py-2 px-2">{lead.businessName || '-'}</td>
-                              <td className="py-2 px-2">{lead.phone || '-'}</td>
-                              <td className="py-2 px-2">{lead.offer || '-'}</td>
-                              <td className="py-2 px-2">
-                                <span className={`px-2 py-1 text-xs rounded-full ${
-                                  lead.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                  lead.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
-                                  lead.status === 'failed' ? 'bg-red-100 text-red-800' :
-                                  'bg-gray-100 text-gray-800'
-                                }`}>
-                                  {lead.status}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    {activeTab === 'leads' && (
+                      <>
+                        {(selectedCampaign.status === 'draft' || selectedCampaign.status === 'ready') && (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                            Edit the Offer for each lead before starting. Leave blank to let AI generate one automatically.
+                          </p>
+                        )}
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <th className="text-left py-2 px-2">Name</th>
+                                <th className="text-left py-2 px-2">Business</th>
+                                <th className="text-left py-2 px-2">Phone</th>
+                                <th className="text-left py-2 px-2">Offer</th>
+                                <th className="text-left py-2 px-2">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {leads.map((lead) => (
+                                <tr key={lead.id} className="border-b border-gray-100 dark:border-gray-700">
+                                  <td className="py-2 px-2">{lead.name || '-'}</td>
+                                  <td className="py-2 px-2">{lead.businessName || '-'}</td>
+                                  <td className="py-2 px-2">{lead.phone || '-'}</td>
+                                  <td className="py-2 px-2">
+                                    {selectedCampaign.status === 'draft' || selectedCampaign.status === 'ready' ? (
+                                      <input
+                                        type="text"
+                                        defaultValue={lead.offer || ''}
+                                        placeholder="e.g. Flat 25% OFF"
+                                        onBlur={(e) => {
+                                          if (e.target.value !== (lead.offer || '')) {
+                                            handleUpdateLeadOffer(lead.id, e.target.value);
+                                          }
+                                        }}
+                                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white"
+                                      />
+                                    ) : (
+                                      lead.offer || '-'
+                                    )}
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <span className={`px-2 py-1 text-xs rounded-full ${
+                                      lead.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                      lead.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
+                                      lead.status === 'failed' ? 'bg-red-100 text-red-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {lead.status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    )}
+
+                    {activeTab === 'posters' && (
+                      <div>
+                        {posters.length === 0 ? (
+                          <p className="text-gray-500 dark:text-gray-400 text-center py-8">No posters generated yet</p>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {posters.map((poster) => (
+                              <div key={poster.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                                {poster.finalPosterUrl ? (
+                                  <img src={poster.finalPosterUrl} alt="Poster" className="w-full aspect-square object-cover" />
+                                ) : (
+                                  <div className="w-full aspect-square bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                                    <ImageIcon className="w-10 h-10 text-gray-400" />
+                                  </div>
+                                )}
+                                <div className="p-3">
+                                  <p className="font-medium text-gray-900 dark:text-white text-sm truncate">
+                                    {poster.lead?.businessName || poster.lead?.name || 'Lead'}
+                                  </p>
+                                  <span className={`inline-block mt-1 px-2 py-1 text-xs rounded-full ${
+                                    poster.status === 'approved' ? 'bg-green-100 text-green-800' :
+                                    poster.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-800' :
+                                    poster.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                                    poster.status === 'failed' ? 'bg-red-100 text-red-800' :
+                                    'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {poster.status}
+                                  </span>
+
+                                  {poster.status === 'pending_approval' && (
+                                    <div className="flex gap-2 mt-3">
+                                      <button
+                                        onClick={() => handlePosterAction(poster.id, 'approve')}
+                                        disabled={posterActionLoading === poster.id}
+                                        className="flex-1 bg-green-500 hover:bg-green-600 text-white text-xs font-medium py-1.5 rounded disabled:opacity-50"
+                                      >
+                                        Approve
+                                      </button>
+                                      <button
+                                        onClick={() => handlePosterAction(poster.id, 'regenerate')}
+                                        disabled={posterActionLoading === poster.id}
+                                        className="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium py-1.5 rounded disabled:opacity-50"
+                                      >
+                                        Regenerate
+                                      </button>
+                                      <button
+                                        onClick={() => handlePosterAction(poster.id, 'reject')}
+                                        disabled={posterActionLoading === poster.id}
+                                        className="flex-1 bg-red-500 hover:bg-red-600 text-white text-xs font-medium py-1.5 rounded disabled:opacity-50"
+                                      >
+                                        Reject
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

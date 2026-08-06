@@ -41,14 +41,21 @@ const processLeadWorker = new Worker(
 
       // Extract business info from raw data (stored as a JSON string — see schema.prisma)
       const rawData = JSON.parse(lead.rawData) as Record<string, any>;
-      
+
+      // A user-edited offer (set via the leads review UI before starting the
+      // campaign) takes precedence over the sheet/AI - captured before
+      // enrichLead overwrites lead.offer below.
+      const manualOffer = lead.offer || undefined;
+
       // Use AI to map columns
       const headers = Object.keys(rawData);
       const mappings = await columnMapper.mapColumns(headers, rawData);
       const mappedLead = await columnMapper.enrichLead(rawData, mappings);
 
-      // Generate missing offer if needed
-      if (!mappedLead.offer || mappedLead.offer === 'No Offer') {
+      if (manualOffer) {
+        mappedLead.offer = manualOffer;
+      } else if (!mappedLead.offer || mappedLead.offer === 'No Offer') {
+        // Generate missing offer if needed
         mappedLead.offer = await columnMapper.generateMissingOffer(
           mappedLead.businessName,
           mappedLead.restaurantType,
@@ -185,11 +192,14 @@ const generatePosterWorker = new Worker(
       const filePath = path.join(uploadsDir, fileName);
       await fs.writeFile(filePath, posterBuffer);
 
-      // Update poster record
+      // Update poster record. Status is "pending_approval" rather than
+      // "completed" and the WhatsApp send is NOT auto-queued here - the
+      // poster waits for an explicit approve action (see
+      // /api/campaigns/[id]/posters/[posterId]/approve) before it's sent.
       await prisma.poster.update({
         where: { id: posterId },
         data: {
-          status: 'completed',
+          status: 'pending_approval',
           finalPosterUrl: `/uploads/posters/${fileName}`,
           prompt: posterPrompt.prompt,
           theme: posterPrompt.theme,
@@ -212,10 +222,7 @@ const generatePosterWorker = new Worker(
         data: { status: 'completed', completedAt: new Date() },
       });
 
-      // Queue WhatsApp message
-      await queueService.addSendMessageJob(campaignId, leadId);
-
-      await logger.info('worker', 'Poster generated successfully', { posterId, leadId });
+      await logger.info('worker', 'Poster generated, awaiting approval', { posterId, leadId });
       return { success: true, posterId };
     } catch (error) {
       await logger.error('worker', 'Failed to generate poster', { error, posterId });
@@ -281,10 +288,13 @@ const sendMessageWorker = new Worker(
         },
       });
 
-      // Send WhatsApp message
+      // Send WhatsApp message. The approved template's body already reads
+      // "Hello {{1}}, We created this exclusive poster..." - only the
+      // customer's name fills the placeholder, not the full sentence
+      // (passing the full sentence duplicated the greeting on delivery).
       const result = await whatsappSender.sendMessage({
         to: lead.phone || '',
-        body: message.messageBody || '',
+        body: lead.name || 'there',
         mediaUrl: message.mediaUrl || undefined,
       });
 

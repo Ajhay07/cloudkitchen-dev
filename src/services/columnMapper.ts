@@ -186,11 +186,22 @@ Return only the offer text, no quotes or explanation.`;
       const text = await callGemini({
         systemInstruction: 'You are a marketing expert for restaurants. Generate short, compelling offers.',
         prompt,
-        maxOutputTokens: 50,
+        // gemini-flash-latest resolves to a "thinking" model that spends
+        // most of maxOutputTokens on hidden reasoning tokens before the
+        // visible answer - a budget of 50-200 was leaving almost nothing
+        // for the actual text, truncating it (e.g. "Buy" instead of
+        // "Buy 1 Get 1 Free"). Confirmed via usageMetadata.thoughtsTokenCount
+        // that ~190 tokens go to thinking alone, so budget generously.
+        maxOutputTokens: 1024,
         temperature: 0.8,
       });
 
-      const offer = text.trim() || 'Flat 20% OFF';
+      let offer = text.trim();
+      // A real offer reads as a short phrase, not a single word - guard
+      // against truncated/incomplete Gemini responses.
+      if (!offer || offer.split(/\s+/).length < 2) {
+        offer = 'Flat 20% OFF';
+      }
       logger.info('mapper', 'Generated missing offer', { offer, businessName });
       return offer;
     } catch (error) {
@@ -213,7 +224,9 @@ Return only the type name, or "General" if unclear.`;
       const text = await callGemini({
         systemInstruction: 'You are a restaurant classification expert. Identify cuisine/business type.',
         prompt,
-        maxOutputTokens: 20,
+        // See generateMissingOffer above - gemini-flash-latest burns most
+        // of the token budget on hidden thinking tokens before answering.
+        maxOutputTokens: 200,
         temperature: 0.3,
       });
 
