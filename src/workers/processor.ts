@@ -185,11 +185,11 @@ const generatePosterWorker = new Worker(
       const filePath = path.join(uploadsDir, fileName);
       await fs.writeFile(filePath, posterBuffer);
 
-      // Update poster record
+      // Update poster record - poster is ready for human review, NOT auto-sent
       await prisma.poster.update({
         where: { id: posterId },
         data: {
-          status: 'completed',
+          status: 'ready_for_review',
           finalPosterUrl: `/uploads/posters/${fileName}`,
           prompt: posterPrompt.prompt,
           theme: posterPrompt.theme,
@@ -212,10 +212,9 @@ const generatePosterWorker = new Worker(
         data: { status: 'completed', completedAt: new Date() },
       });
 
-      // Queue WhatsApp message
-      await queueService.addSendMessageJob(campaignId, leadId);
+      // Do NOT queue WhatsApp message - poster must be approved by a human first
+      await logger.info('worker', 'Poster generated and ready for review', { posterId, leadId });
 
-      await logger.info('worker', 'Poster generated successfully', { posterId, leadId });
       return { success: true, posterId };
     } catch (error) {
       await logger.error('worker', 'Failed to generate poster', { error, posterId });
@@ -245,45 +244,87 @@ const generatePosterWorker = new Worker(
   }
 );
 
-// Send WhatsApp Message Worker
+// Send WhatsApp Message Worker - with hard safety gate: only APPROVED posters can be sent
 const sendMessageWorker = new Worker(
   'send-message',
   async (job) => {
-    const { campaignId, leadId } = job.data;
-    await logger.info('worker', 'Sending WhatsApp message', { campaignId, leadId });
+    const { campaignId, leadId, posterId } = job.data;
+    await logger.info('worker', 'Sending WhatsApp message', { campaignId, leadId, posterId });
 
     try {
-      const lead = await prisma.lead.findUnique({
-        where: { id: leadId },
-        include: {
-          posters: {
-            where: { status: 'completed' },
-            take: 1,
-          },
-        },
-      });
-
-      if (!lead || !lead.posters[0]) {
-        throw new Error('Lead or poster not found');
+      // SAFETY GATE: Re-read the latest poster state from the database.
+      // A queued job is NOT proof of approval - the poster may have been
+      // rejected or regenerated after the job was queued.
+      let poster;
+      if (posterId) {
+        poster = await prisma.poster.findUnique({ where: { id: posterId } });
+      } else {
+        // Legacy fallback: find the most recent approved poster for this lead
+        poster = await prisma.poster.findFirst({
+          where: { leadId, status: 'approved' },
+          orderBy: { updatedAt: 'desc' },
+        });
       }
 
-      const poster = lead.posters[0];
+      if (!poster) {
+        await logger.warn('worker', 'poster.whatsapp_blocked', {
+          campaignId,
+          leadId,
+          posterId: posterId || undefined,
+          reason: 'poster_not_found',
+        });
+        return { success: false, blocked: true, reason: 'poster_not_found' };
+      }
+
+      // Hard gate: status MUST be approved and approvedAt MUST exist
+      if (poster.status !== 'approved' || !poster.approvedAt) {
+        await logger.warn('worker', 'poster.whatsapp_blocked', {
+          campaignId,
+          leadId,
+          posterId: poster.id,
+          status: poster.status,
+          reason: 'poster_not_approved',
+        });
+        // Return success (not throw) so BullMQ does not infinitely retry a permanently blocked job
+        return { success: false, blocked: true, reason: 'poster_not_approved' };
+      }
+
+      // Check the poster's lead
+      const lead = await prisma.lead.findUnique({
+        where: { id: leadId },
+      });
+
+      if (!lead || !lead.phone) {
+        await logger.warn('worker', 'poster.whatsapp_blocked', {
+          campaignId,
+          leadId,
+          posterId: poster.id,
+          reason: 'lead_or_phone_missing',
+        });
+        return { success: false, blocked: true, reason: 'lead_or_phone_missing' };
+      }
 
       // Create message record
       const message = await prisma.message.create({
         data: {
           leadId,
           campaignId,
-          toNumber: lead.phone || '',
+          toNumber: lead.phone,
           messageBody: `Hello ${lead.name || ''}, We created this exclusive poster for your business. Hope you like it!`,
           mediaUrl: poster.finalPosterUrl,
           status: 'pending',
         },
       });
 
+      // Update poster to queued/sending state
+      await prisma.poster.update({
+        where: { id: poster.id },
+        data: { status: 'sending' },
+      });
+
       // Send WhatsApp message
       const result = await whatsappSender.sendMessage({
-        to: lead.phone || '',
+        to: lead.phone,
         body: message.messageBody || '',
         mediaUrl: message.mediaUrl || undefined,
       });
@@ -299,13 +340,25 @@ const sendMessageWorker = new Worker(
         },
       });
 
+      // Update poster status based on result
+      await prisma.poster.update({
+        where: { id: poster.id },
+        data: {
+          status: result.success ? 'sent' : 'failed',
+        },
+      });
+
       // Update lead status
       await prisma.lead.update({
         where: { id: leadId },
-        data: { status: 'completed' },
+        data: { status: result.success ? 'completed' : 'failed' },
       });
 
-      await logger.info('worker', 'WhatsApp message sent', { messageId: message.id, success: result.success });
+      await logger.info('worker', result.success ? 'poster.whatsapp_sent' : 'poster.whatsapp_failed', {
+        messageId: message.id,
+        posterId: poster.id,
+        success: result.success,
+      });
       return { success: result.success, messageId: message.id };
     } catch (error) {
       await logger.error('worker', 'Failed to send WhatsApp message', { error, leadId });

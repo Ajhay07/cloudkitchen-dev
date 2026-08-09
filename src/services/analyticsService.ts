@@ -24,6 +24,18 @@ export interface CampaignAnalytics {
 export class AnalyticsService {
   async getCampaignAnalytics(campaignId: string): Promise<CampaignAnalytics> {
     try {
+      // Fetch aggregated poster status counts
+      const posterStatusCounts = await prisma.poster.groupBy({
+        by: ['status'],
+        where: { campaignId },
+        _count: { _all: true },
+      });
+
+      const posterStatusMap: Record<string, number> = {};
+      posterStatusCounts.forEach((row) => {
+        posterStatusMap[row.status] = row._count._all;
+      });
+
       const campaign = await prisma.campaign.findUnique({
         where: { id: campaignId },
         include: {

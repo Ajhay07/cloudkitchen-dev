@@ -75,9 +75,9 @@ class QueueService {
     return job;
   }
 
-  async addSendMessageJob(campaignId: string, leadId: string) {
-    const job = await this.messageQueue.add('send-message', { campaignId, leadId, type: 'send_message' });
-    await this.createJobRecord(campaignId, 'send_message', leadId, job.id!);
+  async addSendMessageJob(campaignId: string, leadId: string, posterId?: string) {
+    const job = await this.messageQueue.add('send-message', { campaignId, leadId, posterId, type: 'send_message' });
+    await this.createJobRecord(campaignId, 'send_message', leadId, job.id!, posterId);
     return job;
   }
 
