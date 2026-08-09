@@ -8,6 +8,7 @@ import { ImageGenerator } from '@/services/imageGenerator';
 import { PosterComposer } from '@/services/posterComposer';
 import { WhatsAppSender } from '@/services/whatsappSender';
 import queueService from '@/services/queue';
+import { parseJson } from '@/lib/json';
 
 const sheetReader = new SheetReader();
 const columnMapper = new ColumnMapper();
@@ -39,7 +40,7 @@ const processLeadWorker = new Worker(
       });
 
       // Extract business info from raw data
-      const rawData = lead.rawData as Record<string, any>;
+      const rawData = parseJson<Record<string, any>>(lead.rawData) || {};
       
       // Use AI to map columns
       const headers = Object.keys(rawData);
@@ -167,9 +168,9 @@ const generatePosterWorker = new Worker(
         backgroundImageUrl: generatedImage.url,
         businessName: lead.businessName || 'Restaurant',
         offer: lead.offer || 'Flat 20% OFF',
-        address: lead.address,
-        phone: lead.phone,
-        customerName: lead.name,
+        address: lead.address || undefined,
+        phone: lead.phone || undefined,
+        customerName: lead.name || undefined,
         theme: posterPrompt.theme,
       });
 

@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
-import { logger } from '../../src/lib/logger';
+import { logger } from '../src/lib/logger';
+import { serializeJson } from '../src/lib/json';
 
 const prisma = new PrismaClient();
 
@@ -23,7 +24,7 @@ async function main() {
   const leads = [
     {
       campaignId: campaign.id,
-      rawData: {
+      rawData: serializeJson({
         Name: 'Rahul',
         Restaurant: 'Spice Hub',
         Address: 'Anna Nagar, Chennai',
@@ -31,11 +32,11 @@ async function main() {
         City: 'Chennai',
         'Favorite Item': 'Biryani',
         Offer: 'Flat 25% OFF',
-      },
+      }) || '{}',
     },
     {
       campaignId: campaign.id,
-      rawData: {
+      rawData: serializeJson({
         Name: 'Priya',
         Restaurant: 'Food Corner',
         Address: 'Velachery, Chennai',
@@ -43,11 +44,11 @@ async function main() {
         City: 'Chennai',
         'Favorite Item': 'Pizza',
         Offer: 'Buy 1 Get 1',
-      },
+      }) || '{}',
     },
     {
       campaignId: campaign.id,
-      rawData: {
+      rawData: serializeJson({
         Name: 'Arun',
         Restaurant: 'Biryani Palace',
         Address: 'T Nagar, Chennai',
@@ -55,7 +56,7 @@ async function main() {
         City: 'Chennai',
         'Favorite Item': 'Mutton Biryani',
         Offer: 'No Offer',
-      },
+      }) || '{}',
     },
   ];
 
@@ -75,14 +76,14 @@ async function main() {
         level: 'info',
         category: 'system',
         message: 'Database seeded successfully',
-        metadata: { campaignName: campaign.name },
+        metadata: serializeJson({ campaignName: campaign.name }),
       },
       {
         campaignId: campaign.id,
         level: 'info',
         category: 'sheet',
         message: 'Sample campaign created with 3 leads',
-        metadata: { totalLeads: 3 },
+        metadata: serializeJson({ totalLeads: 3 }),
       },
     ],
   });

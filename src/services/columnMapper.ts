@@ -51,24 +51,7 @@ export class ColumnMapper {
             content: prompt,
           },
         ],
-        response_format: { type: 'json_schema', json_schema: {
-          type: 'object',
-          properties: {
-            mappings: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  field: { type: 'string' },
-                  matchedColumns: { type: 'array', items: { type: 'string' } },
-                  confidence: { type: 'number' }
-                },
-                required: ['field', 'matchedColumns', 'confidence']
-              }
-            }
-          },
-          required: ['mappings']
-        }},
+        response_format: { type: 'json_object' } as any,
         temperature: 0.1,
       });
 

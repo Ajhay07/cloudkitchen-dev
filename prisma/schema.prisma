@@ -47,9 +47,10 @@ model Lead {
   id            String    @id @default(cuid())
   campaignId    String
   campaign      Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  posters       Poster[]
   
-  // Raw data from sheet (all columns stored as JSON)
-  rawData       Json
+  // Raw data from sheet (stored as JSON string for SQLite compatibility)
+  rawData       String
   
   // Mapped fields (AI-detected)
   name          String?
@@ -94,6 +95,7 @@ model Poster {
   leadId      String
   campaignId  String
   campaign    Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
   
   // Image paths
   backgroundImageUrl String?
@@ -119,8 +121,8 @@ model Poster {
   
   // Quality metrics
   qualityScore    Float?
-  qualityIssues   Json?
-  qualityRecommendations Json?
+  qualityIssues   String?
+  qualityRecommendations String?
   
   // Variations
   variationOf     String?  // Parent poster ID if this is a variation
@@ -213,7 +215,7 @@ model Log {
   level       String    // info | warn | error | debug
   category     String    // sheet | mapper | poster | whatsapp | queue | system | analytics
   message     String
-  metadata    Json?
+  metadata    String?
   
   createdAt   DateTime  @default(now())
 
@@ -244,7 +246,7 @@ model Branding {
   qrCodeUrl       String?
   
   // Delivery apps
-  deliveryApps    Json?     // Array of {name, url}
+  deliveryApps    String?     // JSON string for SQLite compatibility
   
   // Custom messages
   customMessage   String?

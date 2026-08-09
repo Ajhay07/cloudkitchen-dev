@@ -1,4 +1,4 @@
-import sharp from 'sharp';
+import sharp, { Sharp } from 'sharp';
 import { logger } from '@/lib/logger';
 import QRCode from 'qrcode';
 
@@ -64,7 +64,7 @@ export class PosterComposer {
     }
   }
 
-  private applyThemeOverlay(image: sharp.Instance, theme: string): sharp.Instance {
+  private applyThemeOverlay(image: Sharp, theme: string): Sharp {
     // Apply dark gradient overlay
     const gradientSvg = this.createGradientOverlay(theme);
     return image.composite([
@@ -160,13 +160,13 @@ export class PosterComposer {
     </svg>`;
   }
 
-  private escapeXml(text: string): string {
+    private escapeXml(text: string): string {
     return text
-      .replace(/&/g, '&')
-      .replace(/</g, '<')
-      .replace(/>/g, '>')
-      .replace(/"/g, '"')
-      .replace(/'/g, ''');
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
   }
 
   async addQRCode(imageBuffer: Buffer, qrData: string): Promise<Buffer> {

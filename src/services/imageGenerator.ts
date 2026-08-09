@@ -53,7 +53,8 @@ export class ImageGenerator {
         style: 'vivid',
       });
 
-      const url = response.data[0].url!;
+      const url = response.data?.[0]?.url;
+      if (!url) throw new Error('OpenAI did not return an image URL');
       logger.info('image', 'Image generated with OpenAI', { url });
 
       return {

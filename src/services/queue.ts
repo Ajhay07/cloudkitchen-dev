@@ -52,13 +52,13 @@ class QueueService {
   }
 
   private setupEventListeners() {
-    const queues = [this.processQueue, this.posterQueue, this.messageQueue];
+    const queues = [this.processQueue, this.posterQueue, this.messageQueue] as any[];
     queues.forEach(queue => {
       queue.on('completed', (job: any) => {
         logger.info('queue', `Job completed: ${job.id}`, { type: job.data.type });
       });
       queue.on('failed', (job: any, err: any) => {
-        logger.error('queue', `Job failed: ${job?.id}`, { error: err.message, type: job?.data.type });
+        logger.error('queue', `Job failed: ${job?.id}`, { error: err?.message, type: job?.data?.type });
       });
     });
   }

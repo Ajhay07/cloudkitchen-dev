@@ -1,4 +1,5 @@
 import prisma from './prisma';
+import { serializeJson } from './json';
 
 export enum LogLevel {
   INFO = 'info',
@@ -46,7 +47,7 @@ class Logger {
           level,
           category,
           message,
-          metadata: metadata as any,
+          metadata: serializeJson(metadata),
         },
       });
     } catch (error) {

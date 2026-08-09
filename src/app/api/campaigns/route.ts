@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { SheetReader } from '@/services/sheetReader';
 import queueService from '@/services/queue';
+import { serializeJson } from '@/lib/json';
 
 export async function GET() {
   try {
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
       await prisma.lead.create({
         data: {
           campaignId: campaign.id,
-          rawData: row as any,
+          rawData: serializeJson(row) || '{}',
         },
       });
     }
