@@ -11,7 +11,8 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
-    "worker": "tsx workers/processor.ts",
+    "worker": "tsx src/workers/processor.ts",
+    "postinstall": "prisma generate",
     "test": "jest"
   },
   "dependencies": {
