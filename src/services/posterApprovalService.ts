@@ -103,7 +103,7 @@ export class PosterApprovalService {
       throw new Error('Poster or lead not found');
     }
 
-    const allowedFrom = ['ready_for_review', 'rejected', 'approved'];
+    const allowedFrom = ['ready_for_review', 'rejected', 'approved', 'failed'];
     if (!allowedFrom.includes(poster.status)) {
       throw new Error(`Poster cannot be regenerated from status: ${poster.status}`);
     }

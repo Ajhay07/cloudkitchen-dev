@@ -725,7 +725,7 @@ export default function Dashboard() {
                     </div>
                   )}
 
-                  {(selectedPoster.status === 'ready_for_review' || selectedPoster.status === 'rejected' || selectedPoster.status === 'approved') && (
+                  {(selectedPoster.status === 'ready_for_review' || selectedPoster.status === 'rejected' || selectedPoster.status === 'approved' || selectedPoster.status === 'failed') && (
                     <div className="pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
                       <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Regenerate</p>
                       <textarea
