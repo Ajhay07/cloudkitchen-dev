@@ -113,6 +113,16 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [fetchCampaigns]);
 
+  useEffect(() => {
+    if (!selectedCampaign) return;
+    const interval = setInterval(() => {
+      fetchLeads(selectedCampaign.id);
+      fetchPosters(selectedCampaign.id);
+    }, 4000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCampaign?.id]);
+
   const fetchLeads = useCallback(async (campaignId: string) => {
     try {
       const response = await fetch(`/api/campaigns/${campaignId}/leads`);
