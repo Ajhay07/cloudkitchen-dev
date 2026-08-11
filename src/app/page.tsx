@@ -465,7 +465,7 @@ export default function Dashboard() {
                       <p className="text-gray-600 dark:text-gray-400">{selectedCampaign.processedLeads} / {selectedCampaign.totalLeads} processed</p>
                     </div>
                     <div className="flex gap-2">
-                      {selectedCampaign.status === 'draft' || selectedCampaign.status === 'paused' ? (
+                      {selectedCampaign.status === 'draft' || selectedCampaign.status === 'ready' || selectedCampaign.status === 'paused' ? (
                         <button
                           onClick={handleStartCampaign}
                           disabled={loading}
