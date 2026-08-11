@@ -182,23 +182,34 @@ const generatePosterWorker = new Worker(
         theme: posterPrompt.theme,
       });
 
-      // Save poster to file system (in production, use S3 or similar)
+      // Save poster locally too - whatsappSender's Meta media upload still
+      // reads from local disk (fine, since it runs on the same machine as
+      // this worker). The browser can't reach this machine's filesystem
+      // though, so the poster is ALSO uploaded to Vercel Blob for a public
+      // URL the deployed frontend can actually display.
       const fs = await import('fs/promises');
       const path = await import('path');
-      
+
       const uploadsDir = path.join(process.cwd(), 'uploads', 'posters');
       await fs.mkdir(uploadsDir, { recursive: true });
-      
+
       const fileName = `${posterId}.jpg`;
       const filePath = path.join(uploadsDir, fileName);
       await fs.writeFile(filePath, posterBuffer);
+
+      const { put } = await import('@vercel/blob');
+      const blob = await put(`posters/${fileName}`, posterBuffer, {
+        access: 'public',
+        contentType: 'image/jpeg',
+        addRandomSuffix: false,
+      });
 
       // Update poster record - poster is ready for human review, NOT auto-sent
       await prisma.poster.update({
         where: { id: posterId },
         data: {
           status: 'ready_for_review',
-          finalPosterUrl: `/uploads/posters/${fileName}`,
+          finalPosterUrl: blob.url,
           prompt: posterPrompt.prompt,
           theme: posterPrompt.theme,
           detectedFoodType: posterPrompt.foodType,
