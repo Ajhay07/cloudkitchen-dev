@@ -202,6 +202,9 @@ const generatePosterWorker = new Worker(
         access: 'public',
         contentType: 'image/jpeg',
         addRandomSuffix: false,
+        // Regenerating a poster reuses the same posterId/filename - without
+        // this, Blob refuses to overwrite and every regenerate attempt fails.
+        allowOverwrite: true,
       });
 
       // Update poster record - poster is ready for human review, NOT auto-sent
