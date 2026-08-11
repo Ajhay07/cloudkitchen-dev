@@ -9,6 +9,7 @@ import { PosterComposer } from '@/services/posterComposer';
 import { WhatsAppSender } from '@/services/whatsappSender';
 import queueService from '@/services/queue';
 import { parseJson } from '@/lib/json';
+import { redisConnection } from '@/lib/redis';
 
 const sheetReader = new SheetReader();
 const columnMapper = new ColumnMapper();
@@ -41,14 +42,21 @@ const processLeadWorker = new Worker(
 
       // Extract business info from raw data
       const rawData = parseJson<Record<string, any>>(lead.rawData) || {};
-      
+
+      // A user-edited offer (set via the leads review UI before starting the
+      // campaign) takes precedence over the sheet/AI - captured before
+      // enrichLead overwrites lead.offer below.
+      const manualOffer = lead.offer || undefined;
+
       // Use AI to map columns
       const headers = Object.keys(rawData);
       const mappings = await columnMapper.mapColumns(headers, rawData);
       const mappedLead = await columnMapper.enrichLead(rawData, mappings);
 
-      // Generate missing offer if needed
-      if (!mappedLead.offer || mappedLead.offer === 'No Offer') {
+      if (manualOffer) {
+        mappedLead.offer = manualOffer;
+      } else if (!mappedLead.offer || mappedLead.offer === 'No Offer') {
+        // Generate missing offer if needed
         mappedLead.offer = await columnMapper.generateMissingOffer(
           mappedLead.businessName,
           mappedLead.restaurantType,
@@ -118,7 +126,7 @@ const processLeadWorker = new Worker(
     }
   },
   {
-    connection: { host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379') },
+    connection: redisConnection,
     concurrency: 5,
   }
 );
@@ -239,7 +247,7 @@ const generatePosterWorker = new Worker(
     }
   },
   {
-    connection: { host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379') },
+    connection: redisConnection,
     concurrency: 3,
   }
 );
@@ -322,10 +330,13 @@ const sendMessageWorker = new Worker(
         data: { status: 'sending' },
       });
 
-      // Send WhatsApp message
+      // Send WhatsApp message. The approved template's body already reads
+      // "Hello {{1}}, We created this exclusive poster..." - only the
+      // customer's name fills the placeholder, not the full sentence
+      // (passing the full sentence duplicated the greeting on delivery).
       const result = await whatsappSender.sendMessage({
         to: lead.phone,
-        body: message.messageBody || '',
+        body: lead.name || 'there',
         mediaUrl: message.mediaUrl || undefined,
       });
 
@@ -375,7 +386,7 @@ const sendMessageWorker = new Worker(
     }
   },
   {
-    connection: { host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379') },
+    connection: redisConnection,
     concurrency: 10,
   }
 );

@@ -33,28 +33,24 @@ export class PosterPromptGenerator {
       const foodItem = lead.favoriteItem || this.getDefaultFoodItem(restaurantType);
       const theme = this.determineTheme(restaurantType, lead);
 
-      const prompt = `Create a premium food promotion poster for Instagram (1080x1080).
-
-Business: ${businessName}
-${lead.name ? `Customer: ${lead.name}` : ''}
-Offer: ${offer}
-${lead.address ? `Location: ${lead.address}` : ''}
-${lead.phone ? `Contact: ${lead.phone}` : ''}
+      // Deliberately a pure food-photography brief with no business name,
+      // offer, or contact details, and an explicit no-text instruction:
+      // Gemini was rendering those as literal captions baked into the
+      // image, which then duplicated with posterComposer's own SVG text
+      // overlay (which is the single source of truth for all on-poster text).
+      const prompt = `Create a premium food photography background for an Instagram marketing poster (1080x1080).
 
 Food Item: ${foodItem}
 Theme: ${theme}
 
 Style requirements:
 - Modern, minimal design with dark background
-- Premium food photography of ${foodItem}
-- Professional commercial advertisement quality
-- Elegant typography with good contrast
-- Subtle shadows and depth
-- Gradient accents
-- Leave clear space at top for business name and middle for offer text
+- Premium, appetizing food photography of ${foodItem}, shot like a commercial advertisement
+- Subtle shadows and depth, gradient accents
+- Leave clear empty space at the top and in the middle of the frame (for text to be added later)
 - High resolution, Instagram-ready square format
 
-Make it look like a premium restaurant marketing poster.`;
+Absolutely no text, words, letters, numbers, or typography anywhere in the image - pure photography only, completely free of any writing.`;
 
       logger.info('poster', 'Generated poster prompt', { businessName, theme, foodItem });
 

@@ -19,3 +19,26 @@ export async function GET(
     return NextResponse.json({ error: 'Failed to fetch leads' }, { status: 500 });
   }
 }
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const { leadId, offer } = await request.json();
+
+    if (!leadId) {
+      return NextResponse.json({ error: 'leadId is required' }, { status: 400 });
+    }
+
+    const lead = await prisma.lead.update({
+      where: { id: leadId, campaignId: params.id },
+      data: { offer },
+    });
+
+    return NextResponse.json(lead);
+  } catch (error) {
+    logger.error('api', 'Failed to update lead', { error, campaignId: params.id });
+    return NextResponse.json({ error: 'Failed to update lead' }, { status: 500 });
+  }
+}

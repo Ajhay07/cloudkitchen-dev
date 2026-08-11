@@ -1,6 +1,7 @@
 import { Queue } from 'bullmq';
 import { logger } from '@/lib/logger';
 import prisma from '@/lib/prisma';
+import { redisConnection } from '@/lib/redis';
 
 export interface JobData {
   campaignId: string;
@@ -16,7 +17,7 @@ class QueueService {
 
   constructor() {
     this.processQueue = new Queue('process-lead', {
-      connection: { host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379') },
+      connection: redisConnection,
       defaultJobOptions: {
         attempts: 3,
         backoff: {
@@ -29,7 +30,7 @@ class QueueService {
     });
 
     this.posterQueue = new Queue('generate-poster', {
-      connection: { host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379') },
+      connection: redisConnection,
       defaultJobOptions: {
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
@@ -39,7 +40,7 @@ class QueueService {
     });
 
     this.messageQueue = new Queue('send-message', {
-      connection: { host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379') },
+      connection: redisConnection,
       defaultJobOptions: {
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
@@ -52,15 +53,10 @@ class QueueService {
   }
 
   private setupEventListeners() {
-    const queues = [this.processQueue, this.posterQueue, this.messageQueue] as any[];
-    queues.forEach(queue => {
-      queue.on('completed', (job: any) => {
-        logger.info('queue', `Job completed: ${job.id}`, { type: job.data.type });
-      });
-      queue.on('failed', (job: any, err: any) => {
-        logger.error('queue', `Job failed: ${job?.id}`, { error: err?.message, type: job?.data?.type });
-      });
-    });
+    // Intentional no-op: BullMQ's Queue class does not emit 'completed'/
+    // 'failed' events (only QueueEvents does, which hangs indefinitely
+    // against this Upstash instance - see src/lib/redis.ts). Job status is
+    // tracked via the Job table and each worker's own logging instead.
   }
 
   async addProcessLeadJob(campaignId: string, leadId: string) {

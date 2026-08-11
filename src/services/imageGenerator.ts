@@ -27,6 +27,8 @@ export class ImageGenerator {
       switch (this.provider) {
         case 'openai':
           return this.generateWithOpenAI(prompt, size);
+        case 'gemini':
+          return this.generateWithGemini(prompt, size);
         case 'stability':
           return this.generateWithStability(prompt, size);
         case 'fal':
@@ -53,8 +55,7 @@ export class ImageGenerator {
         style: 'vivid',
       });
 
-      const url = response.data?.[0]?.url;
-      if (!url) throw new Error('OpenAI did not return an image URL');
+      const url = response.data![0].url!;
       logger.info('image', 'Image generated with OpenAI', { url });
 
       return {
@@ -64,6 +65,58 @@ export class ImageGenerator {
       };
     } catch (error) {
       logger.error('image', 'OpenAI image generation failed', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * 'gemini' was declared in the ImageProvider type but never actually
+   * implemented (no case in the switch above, no method at all) — added
+   * per the user's request to avoid paid image providers (Fal.ai/OpenAI/
+   * Stability all require a funded account; Gemini's free tier does not).
+   * Uses gemini-2.5-flash-image ("nano-banana"), which returns inline
+   * base64 image data (not a hosted URL) — encoded here as a data: URI,
+   * same pattern already used by generateWithStability above.
+   */
+  private async generateWithGemini(prompt: string, size: string): Promise<GeneratedImage> {
+    try {
+      const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error('GOOGLE_GEMINI_API_KEY not configured');
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(`Gemini image API error (${response.status}): ${JSON.stringify(data).slice(0, 300)}`);
+      }
+
+      const parts = data.candidates?.[0]?.content?.parts ?? [];
+      const imagePart = parts.find((p: any) => p.inlineData?.data);
+      if (!imagePart) {
+        throw new Error(`Gemini response contained no image data: ${JSON.stringify(data).slice(0, 300)}`);
+      }
+
+      const mimeType = imagePart.inlineData.mimeType || 'image/png';
+      const url = `data:${mimeType};base64,${imagePart.inlineData.data}`;
+
+      logger.info('image', 'Image generated with Gemini');
+
+      return {
+        url,
+        provider: 'gemini',
+        prompt,
+      };
+    } catch (error) {
+      logger.error('image', 'Gemini image generation failed', { error });
       throw error;
     }
   }
@@ -111,7 +164,10 @@ export class ImageGenerator {
       const apiKey = process.env.FAL_API_KEY;
       if (!apiKey) throw new Error('FAL API key not configured');
 
-      const response = await fetch('https://fal.run/fal-ai/stable-diffusion/v3-medium', {
+      // 'stable-diffusion/v3-medium' is not a valid Fal.ai model id (confirmed
+      // via a live 404: "Application 'stable-diffusion' not found"). Switched
+      // to a current, valid model.
+      const response = await fetch('https://fal.run/fal-ai/flux/schnell', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -120,13 +176,17 @@ export class ImageGenerator {
         body: JSON.stringify({
           prompt,
           image_size: 'square',
-          num_inference_steps: 28,
-          guidance_scale: 7.5,
         }),
       });
 
       const data = await response.json();
-      const url = data.images[0].url;
+      if (!response.ok) {
+        throw new Error(`Fal.ai error (${response.status}): ${JSON.stringify(data).slice(0, 300)}`);
+      }
+      const url = data.images?.[0]?.url;
+      if (!url) {
+        throw new Error(`Fal.ai response missing images[0].url: ${JSON.stringify(data).slice(0, 300)}`);
+      }
 
       logger.info('image', 'Image generated with FAL');
 

@@ -1,5 +1,8 @@
 import axios from 'axios';
 import twilio from 'twilio';
+import FormData from 'form-data';
+import fs from 'fs';
+import path from 'path';
 import { logger } from '@/lib/logger';
 
 export interface WhatsAppMessage {
@@ -53,17 +56,42 @@ export class WhatsAppSender {
     }
   }
 
+  /**
+   * Meta can't fetch images from a bare local path (/uploads/...) or from
+   * localhost, so local poster files are uploaded directly to Meta's Media
+   * API and referenced by media id instead of a link.
+   */
+  private async uploadMediaToMeta(localMediaPath: string): Promise<string> {
+    const absolutePath = path.join(process.cwd(), 'uploads', 'posters', path.basename(localMediaPath));
+    const form = new FormData();
+    form.append('messaging_product', 'whatsapp');
+    form.append('file', fs.createReadStream(absolutePath), { contentType: 'image/jpeg' });
+
+    const response = await axios.post(
+      `https://graph.facebook.com/v18.0/${this.metaPhoneNumberId}/media`,
+      form,
+      {
+        headers: {
+          ...form.getHeaders(),
+          'Authorization': `Bearer ${this.metaToken}`,
+        },
+      }
+    );
+
+    return response.data.id;
+  }
+
   private async sendWithMeta(message: WhatsAppMessage): Promise<SendResult> {
     try {
       const url = `https://graph.facebook.com/v18.0/${this.metaPhoneNumberId}/messages`;
-      
+
       const payload: any = {
         messaging_product: 'whatsapp',
         to: message.to,
         type: 'template',
         template: {
           name: 'marketing_poster',
-          language: { code: 'en_US' },
+          language: { code: 'en' },
           components: [
             {
               type: 'body',
@@ -77,12 +105,17 @@ export class WhatsAppSender {
 
       // Add media if provided
       if (message.mediaUrl) {
+        const isLocalPath = message.mediaUrl.startsWith('/uploads/') || message.mediaUrl.startsWith('uploads/');
+        const image = isLocalPath
+          ? { id: await this.uploadMediaToMeta(message.mediaUrl) }
+          : { link: message.mediaUrl };
+
         payload.template.components.push({
           type: 'header',
           parameters: [
             {
               type: 'image',
-              image: { link: message.mediaUrl },
+              image,
             },
           ],
         });

@@ -5,7 +5,10 @@ import {
   Upload, Play, Pause, Users, Image as ImageIcon, CheckCircle, XCircle, Clock,
   Eye, ThumbsUp, ThumbsDown, RefreshCcw, X,
 } from 'lucide-react';
-import { logger } from '@/lib/logger';
+// Prisma-backed lib/logger.ts must never be imported into a client
+// ('use client') component - it crashes on every call in the browser and
+// masks the real error. Use console.error directly instead.
+const logger = { error: (...args: unknown[]) => console.error('[dashboard]', ...args) };
 
 interface Campaign {
   id: string;
@@ -87,6 +90,7 @@ export default function Dashboard() {
   const [campaignName, setCampaignName] = useState('');
   const [sheetUrl, setSheetUrl] = useState('');
   const [uploadType, setUploadType] = useState<'url' | 'file'>('url');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const fetchCampaigns = useCallback(async () => {
     try {
@@ -138,57 +142,57 @@ export default function Dashboard() {
 
   const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (uploadType === 'file' && !selectedFile) {
+      alert('Please choose a file to upload');
+      return;
+    }
+
     setUploading(true);
     try {
       const formData = new FormData();
       formData.append('name', campaignName);
-      formData.append('sheetType', uploadType === 'url' ? 'google_sheets' : 'excel');
-      if (uploadType === 'url') formData.append('sheetUrl', sheetUrl);
+
+      if (uploadType === 'url') {
+        formData.append('sheetType', 'google_sheets');
+        formData.append('sheetUrl', sheetUrl);
+      } else if (selectedFile) {
+        formData.append('sheetType', selectedFile.name.endsWith('.csv') ? 'csv' : 'excel');
+        formData.append('file', selectedFile);
+      }
+
       const response = await fetch('/api/campaigns', { method: 'POST', body: formData });
       if (!response.ok) throw new Error('Failed to create campaign');
       const campaign = await response.json();
       setCampaignName('');
       setSheetUrl('');
+      setSelectedFile(null);
       await fetchCampaigns();
       setSelectedCampaign(campaign);
     } catch (error) {
-      logger.error('dashboard', 'Failed to create campaign', { error });
+      logger.error('Failed to create campaign', { error });
       alert('Failed to create campaign');
     } finally {
       setUploading(false);
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('name', campaignName || 'Uploaded Campaign');
-      formData.append('file', file);
-      formData.append('sheetType', file.name.endsWith('.csv') ? 'csv' : 'excel');
-      const response = await fetch('/api/campaigns', { method: 'POST', body: formData });
-      if (!response.ok) throw new Error('Failed to upload file');
-      const campaign = await response.json();
-      await fetchCampaigns();
-      setSelectedCampaign(campaign);
-    } catch (error) {
-      logger.error('dashboard', 'Failed to upload file', { error });
-      alert('Failed to upload file');
-    } finally {
-      setUploading(false);
-    }
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSelectedFile(e.target.files?.[0] || null);
   };
 
   const handleStartCampaign = async () => {
     if (!selectedCampaign) return;
     setLoading(true);
     try {
-      await fetch(`/api/campaigns/${selectedCampaign.id}/start`, { method: 'POST' });
+      await fetch(`/api/campaigns/${selectedCampaign.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start' }),
+      });
       await fetchCampaigns();
     } catch (error) {
-      logger.error('dashboard', 'Failed to start campaign', { error });
+      logger.error('Failed to start campaign', { error });
     } finally {
       setLoading(false);
     }
@@ -197,10 +201,28 @@ export default function Dashboard() {
   const handlePauseCampaign = async () => {
     if (!selectedCampaign) return;
     try {
-      await fetch(`/api/campaigns/${selectedCampaign.id}/pause`, { method: 'POST' });
+      await fetch(`/api/campaigns/${selectedCampaign.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'pause' }),
+      });
       await fetchCampaigns();
     } catch (error) {
-      logger.error('dashboard', 'Failed to pause campaign', { error });
+      logger.error('Failed to pause campaign', { error });
+    }
+  };
+
+  const handleUpdateLeadOffer = async (leadId: string, offer: string) => {
+    if (!selectedCampaign) return;
+    setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, offer } : l)));
+    try {
+      await fetch(`/api/campaigns/${selectedCampaign.id}/leads`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId, offer }),
+      });
+    } catch (error) {
+      logger.error('Failed to update lead offer', { error });
     }
   };
 
@@ -384,7 +406,7 @@ export default function Dashboard() {
                     <input
                       type="file"
                       accept=".xlsx,.xls,.csv"
-                      onChange={handleFileUpload}
+                      onChange={handleFileSelect}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
                     />
                   </div>
@@ -502,6 +524,11 @@ export default function Dashboard() {
                   <div className="p-6">
                     {activeTab === 'leads' && (
                       <div className="overflow-x-auto">
+                        {(selectedCampaign.status === 'draft' || selectedCampaign.status === 'ready') && (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                            Edit the Offer for each lead before starting. Leave blank to let AI generate one automatically.
+                          </p>
+                        )}
                         <table className="w-full">
                           <thead>
                             <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -518,7 +545,23 @@ export default function Dashboard() {
                                 <td className="py-2 px-2 text-sm">{lead.name || '-'}</td>
                                 <td className="py-2 px-2 text-sm">{lead.businessName || '-'}</td>
                                 <td className="py-2 px-2 text-sm">{lead.phone || '-'}</td>
-                                <td className="py-2 px-2 text-sm">{lead.offer || '-'}</td>
+                                <td className="py-2 px-2 text-sm">
+                                  {selectedCampaign.status === 'draft' || selectedCampaign.status === 'ready' ? (
+                                    <input
+                                      type="text"
+                                      defaultValue={lead.offer || ''}
+                                      placeholder="e.g. Flat 25% OFF"
+                                      onBlur={(e) => {
+                                        if (e.target.value !== (lead.offer || '')) {
+                                          handleUpdateLeadOffer(lead.id, e.target.value);
+                                        }
+                                      }}
+                                      className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white"
+                                    />
+                                  ) : (
+                                    lead.offer || '-'
+                                  )}
+                                </td>
                                 <td className="py-2 px-2">
                                   <span className={`px-2 py-1 text-xs rounded-full ${
                                     lead.status === 'completed' ? 'bg-green-100 text-green-800' :
