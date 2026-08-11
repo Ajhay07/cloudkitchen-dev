@@ -40,6 +40,7 @@ interface Poster {
   theme?: string;
   qualityScore?: number;
   detectedFoodType?: string;
+  updatedAt?: string;
   lead?: {
     name?: string;
     businessName?: string;
@@ -48,6 +49,15 @@ interface Poster {
     city?: string;
     offer?: string;
   };
+}
+
+// Regenerating a poster overwrites the same Blob URL - without a
+// cache-busting query param, browsers keep showing the old cached image
+// even after the src is "changed" to the (identical) URL.
+function posterImageSrc(poster: Poster): string | undefined {
+  if (!poster.finalPosterUrl) return undefined;
+  const v = poster.updatedAt ? new Date(poster.updatedAt).getTime() : Date.now();
+  return `${poster.finalPosterUrl}?v=${v}`;
 }
 
 const statusStyles: Record<string, string> = {
@@ -122,6 +132,19 @@ export default function Dashboard() {
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCampaign?.id]);
+
+  // Keep the open "Review Poster" modal in sync with the background poster
+  // list as it refreshes - without this, regenerating shows no visible
+  // change because the modal keeps rendering the stale snapshot it was
+  // opened with, even after the new image is ready.
+  useEffect(() => {
+    if (!selectedPoster) return;
+    const fresh = posters.find((p) => p.id === selectedPoster.id);
+    if (fresh && JSON.stringify(fresh) !== JSON.stringify(selectedPoster)) {
+      setSelectedPoster(fresh);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posters]);
 
   const fetchLeads = useCallback(async (campaignId: string) => {
     try {
@@ -278,9 +301,13 @@ export default function Dashboard() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to regenerate');
+      // Regeneration takes ~15-20s in the background worker - keep the modal
+      // open (rather than closing it) so the user can watch it update live;
+      // the poster-list polling + selectedPoster sync effect pick up the
+      // finished image automatically once it's ready.
+      if (data.poster) setSelectedPoster(data.poster);
       if (selectedCampaign) await fetchPosters(selectedCampaign.id);
       setRegenerateInstruction('');
-      setSelectedPoster(null);
     } catch (error) {
       logger.error('dashboard', 'Failed to regenerate poster', { error });
       alert(error instanceof Error ? error.message : 'Failed to regenerate poster');
@@ -594,7 +621,7 @@ export default function Dashboard() {
                           <div key={poster.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
                             {poster.finalPosterUrl ? (
                               <img
-                                src={poster.finalPosterUrl}
+                                src={posterImageSrc(poster)}
                                 alt={poster.lead?.businessName || 'Poster'}
                                 className="w-full h-48 object-cover cursor-pointer"
                                 onClick={() => setSelectedPoster(poster)}
@@ -661,7 +688,7 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   {selectedPoster.finalPosterUrl ? (
-                    <img src={selectedPoster.finalPosterUrl} alt="Poster preview" className="w-full rounded-lg shadow-lg" />
+                    <img src={posterImageSrc(selectedPoster)} alt="Poster preview" className="w-full rounded-lg shadow-lg" />
                   ) : (
                     <div className="w-full aspect-square bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
                       <ImageIcon className="w-16 h-16 text-gray-400" />
