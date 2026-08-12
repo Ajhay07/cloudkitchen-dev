@@ -46,6 +46,16 @@ export class PosterPromptGenerator {
         ? '- Composition and subject placement are dictated entirely by the instruction above, not by any default layout preference'
         : '- Leave clear empty space at the top and in the middle of the frame (for text to be added later)';
 
+      // When a custom instruction is present, drop every explicit mention
+      // of the original food item rather than just deprioritizing it.
+      // Repeating "Food Item: Butter Chicken" / "photography of Butter
+      // Chicken" even below a high-priority override instruction still let
+      // the model partially honor both - observed producing a literal
+      // hybrid image (sushi on top, the original curry still on the
+      // bottom) instead of fully replacing the subject. A generic
+      // "the subject described above" line removes that anchor entirely.
+      const foodItemLine = options.forCustomInstruction ? 'the subject described in the instruction above' : foodItem;
+
       // Deliberately a pure food-photography brief with no business name,
       // offer, or contact details, and an explicit no-text instruction:
       // Gemini was rendering those as literal captions baked into the
@@ -53,12 +63,11 @@ export class PosterPromptGenerator {
       // overlay (which is the single source of truth for all on-poster text).
       const prompt = `Create a premium food photography background for an Instagram marketing poster (1080x1080).
 
-Food Item: ${foodItem}
-Theme: ${theme}
+${options.forCustomInstruction ? '' : `Food Item: ${foodItem}\n`}Theme: ${theme}
 
 Style requirements:
 - Modern, minimal design with dark background
-- Premium, appetizing food photography of ${foodItem}, shot like a commercial advertisement
+- Premium, appetizing food photography of ${foodItemLine}, shot like a commercial advertisement
 - Subtle shadows and depth, gradient accents
 ${layoutLine}
 - High resolution, Instagram-ready square format
