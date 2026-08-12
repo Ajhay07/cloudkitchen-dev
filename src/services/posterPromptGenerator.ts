@@ -17,21 +17,34 @@ export class PosterPromptGenerator {
     });
   }
 
-  async generatePrompt(lead: {
-    businessName?: string;
-    name?: string;
-    offer?: string;
-    address?: string;
-    phone?: string;
-    restaurantType?: string;
-    favoriteItem?: string;
-  }): Promise<PosterPrompt> {
+  async generatePrompt(
+    lead: {
+      businessName?: string;
+      name?: string;
+      offer?: string;
+      address?: string;
+      phone?: string;
+      restaurantType?: string;
+      favoriteItem?: string;
+    },
+    // When a custom user instruction is being layered on top of this prompt
+    // (see posterApprovalService.regeneratePoster), the fixed "leave empty
+    // space in the middle" composition rule below actively fights any
+    // instruction about repositioning/centering the subject - the two were
+    // silently cancelling each other out. Drop that line whenever the
+    // caller says a composition-overriding instruction is coming.
+    options: { forCustomInstruction?: boolean } = {}
+  ): Promise<PosterPrompt> {
     try {
       const businessName = lead.businessName || 'Restaurant';
       const offer = lead.offer || 'Flat 20% OFF';
       const restaurantType = lead.restaurantType || 'General';
       const foodItem = lead.favoriteItem || this.getDefaultFoodItem(restaurantType);
       const theme = this.determineTheme(restaurantType, lead);
+
+      const layoutLine = options.forCustomInstruction
+        ? '- Composition and subject placement are dictated entirely by the instruction above, not by any default layout preference'
+        : '- Leave clear empty space at the top and in the middle of the frame (for text to be added later)';
 
       // Deliberately a pure food-photography brief with no business name,
       // offer, or contact details, and an explicit no-text instruction:
@@ -47,7 +60,7 @@ Style requirements:
 - Modern, minimal design with dark background
 - Premium, appetizing food photography of ${foodItem}, shot like a commercial advertisement
 - Subtle shadows and depth, gradient accents
-- Leave clear empty space at the top and in the middle of the frame (for text to be added later)
+${layoutLine}
 - High resolution, Instagram-ready square format
 
 Absolutely no text, words, letters, numbers, or typography anywhere in the image - pure photography only, completely free of any writing.`;

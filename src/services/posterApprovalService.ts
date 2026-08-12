@@ -137,17 +137,20 @@ export class PosterApprovalService {
     // INSTRUCTION" blocks fighting each other, plus the stale food item
     // still mentioned underneath). Each regenerate call starts fresh and
     // applies only the instruction given this time.
-    const { prompt: basePrompt } = await promptGenerator.generatePrompt({
-      businessName: lead.businessName || undefined,
-      name: lead.name || undefined,
-      offer: lead.offer || undefined,
-      address: lead.address || undefined,
-      phone: lead.phone || undefined,
-      restaurantType: lead.restaurantType || undefined,
-      favoriteItem: lead.favoriteItem || undefined,
-    });
+    const { prompt: basePrompt } = await promptGenerator.generatePrompt(
+      {
+        businessName: lead.businessName || undefined,
+        name: lead.name || undefined,
+        offer: lead.offer || undefined,
+        address: lead.address || undefined,
+        phone: lead.phone || undefined,
+        restaurantType: lead.restaurantType || undefined,
+        favoriteItem: lead.favoriteItem || undefined,
+      },
+      { forCustomInstruction: !!instruction }
+    );
     const promptWithInstruction = instruction
-      ? `IMPORTANT OVERRIDE INSTRUCTION (this takes priority over anything below): ${instruction}\n\n${basePrompt}`
+      ? `IMPORTANT OVERRIDE INSTRUCTION - this is a mandatory requirement, not a suggestion, and takes absolute priority over every other line in this prompt, including composition/layout/subject details below: ${instruction}\n\n${basePrompt}`
       : basePrompt;
 
     // Update poster with instruction and queue regeneration through existing pipeline
