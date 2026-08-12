@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Upload, Play, Pause, Users, Image as ImageIcon, CheckCircle, XCircle, Clock,
-  Eye, ThumbsUp, ThumbsDown, RefreshCcw, X,
+  Upload, Play, Pause, Users, Image as ImageIcon, CheckCircle2, XCircle, Clock3,
+  Eye, ThumbsUp, ThumbsDown, RefreshCcw, X, Sparkles,
 } from 'lucide-react';
 // Prisma-backed lib/logger.ts must never be imported into a client
 // ('use client') component - it crashes on every call in the browser and
@@ -60,19 +60,19 @@ function posterImageSrc(poster: Poster): string | undefined {
   return `${poster.finalPosterUrl}?v=${v}`;
 }
 
-const statusStyles: Record<string, string> = {
-  pending: 'bg-gray-100 text-gray-800',
-  generating: 'bg-blue-100 text-blue-800',
-  ready_for_review: 'bg-yellow-100 text-yellow-800',
-  approved: 'bg-green-100 text-green-800',
-  rejected: 'bg-red-100 text-red-800',
-  regenerating: 'bg-purple-100 text-purple-800',
-  sending: 'bg-indigo-100 text-indigo-800',
-  sent: 'bg-emerald-100 text-emerald-800',
-  failed: 'bg-red-100 text-red-800',
+const posterStatusStyles: Record<string, string> = {
+  pending: 'bg-surface3 text-text-muted',
+  generating: 'bg-info/10 text-info',
+  ready_for_review: 'bg-warning/10 text-warning',
+  approved: 'bg-success/10 text-success',
+  rejected: 'bg-danger/10 text-danger',
+  regenerating: 'bg-accent/10 text-accent',
+  sending: 'bg-info/10 text-info',
+  sent: 'bg-success/10 text-success',
+  failed: 'bg-danger/10 text-danger',
 };
 
-const statusLabel: Record<string, string> = {
+const posterStatusLabel: Record<string, string> = {
   pending: 'Pending',
   generating: 'Generating',
   ready_for_review: 'Ready for Review',
@@ -82,6 +82,22 @@ const statusLabel: Record<string, string> = {
   sending: 'Sending',
   sent: 'Sent',
   failed: 'Failed',
+};
+
+const campaignStatusStyles: Record<string, string> = {
+  draft: 'bg-surface3 text-text-muted',
+  ready: 'bg-info/10 text-info',
+  processing: 'bg-warning/10 text-warning',
+  paused: 'bg-surface3 text-text-muted',
+  completed: 'bg-success/10 text-success',
+  failed: 'bg-danger/10 text-danger',
+};
+
+const leadStatusStyles: Record<string, string> = {
+  pending: 'bg-surface3 text-text-muted',
+  processing: 'bg-warning/10 text-warning',
+  completed: 'bg-success/10 text-success',
+  failed: 'bg-danger/10 text-danger',
 };
 
 export default function Dashboard() {
@@ -132,6 +148,19 @@ export default function Dashboard() {
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCampaign?.id]);
+
+  // Keep the selected campaign's header (progress bar, counts, Start/Pause
+  // button) in sync with the polled campaigns list - without this it was a
+  // frozen snapshot from the moment it was clicked, requiring a manual
+  // reselect/refresh to see any progress at all.
+  useEffect(() => {
+    if (!selectedCampaign) return;
+    const fresh = campaigns.find((c) => c.id === selectedCampaign.id);
+    if (fresh && JSON.stringify(fresh) !== JSON.stringify(selectedCampaign)) {
+      setSelectedCampaign(fresh);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaigns]);
 
   // Keep the open "Review Poster" modal in sync with the background poster
   // list as it refreshes - without this, regenerating shows no visible
@@ -317,273 +346,249 @@ export default function Dashboard() {
   };
 
   const getPosterStatusCount = (status: string) => posters.filter((p) => p.status === status).length;
+  const canStart = selectedCampaign && ['draft', 'ready', 'paused'].includes(selectedCampaign.status);
+  const canEditOffer = selectedCampaign && ['draft', 'ready'].includes(selectedCampaign.status);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">CloudKitchen Dev</h1>
-          <p className="text-gray-600 dark:text-gray-400">AI-Powered Marketing Poster Generator & WhatsApp Automation</p>
-        </div>
+    <div className="min-h-screen bg-bg text-text font-body">
+      <div className="mx-auto flex max-w-[1600px]">
+        {/* Sidebar */}
+        <aside className="sticky top-0 hidden h-screen w-[340px] shrink-0 flex-col border-r border-border bg-surface lg:flex">
+          <div className="flex items-center gap-2.5 border-b border-border px-6 py-6">
+            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-accent">
+              <Sparkles className="h-4 w-4 text-bg" strokeWidth={2.5} />
+            </div>
+            <div>
+              <p className="font-display text-lg leading-none text-text">CloudKitchen</p>
+              <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-text-dim">Marketing Automation</p>
+            </div>
+          </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Leads</p>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.total}</p>
-              </div>
-              <Users className="w-12 h-12 text-blue-500" />
-            </div>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Processing</p>
-                <p className="text-3xl font-bold text-yellow-600">{stats.processing}</p>
-              </div>
-              <Clock className="w-12 h-12 text-yellow-500" />
-            </div>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Completed</p>
-                <p className="text-3xl font-bold text-green-600">{stats.completed}</p>
-              </div>
-              <CheckCircle className="w-12 h-12 text-green-500" />
-            </div>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Failed</p>
-                <p className="text-3xl font-bold text-red-600">{stats.failed}</p>
-              </div>
-              <XCircle className="w-12 h-12 text-red-500" />
-            </div>
-          </div>
-        </div>
+          <div className="flex-1 overflow-y-auto px-6 py-6">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-dim">New campaign</p>
+            <form onSubmit={handleCreateCampaign} className="space-y-3">
+              <input
+                type="text"
+                value={campaignName}
+                onChange={(e) => setCampaignName(e.target.value)}
+                placeholder="Campaign name"
+                required
+                className="w-full rounded-md border border-border bg-surface2 px-3 py-2.5 text-sm text-text placeholder:text-text-dim outline-none transition-colors focus:border-accent"
+              />
 
-        {selectedCampaign && posters.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-            <div className="bg-yellow-50 dark:bg-yellow-900/30 rounded-lg p-4">
-              <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">Ready for Review</p>
-              <p className="text-2xl font-bold text-yellow-600">{getPosterStatusCount('ready_for_review')}</p>
-            </div>
-            <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-4">
-              <p className="text-sm font-medium text-green-800 dark:text-green-200">Approved</p>
-              <p className="text-2xl font-bold text-green-600">{getPosterStatusCount('approved')}</p>
-            </div>
-            <div className="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-4">
-              <p className="text-sm font-medium text-purple-800 dark:text-purple-200">Regenerating</p>
-              <p className="text-2xl font-bold text-purple-600">{getPosterStatusCount('regenerating')}</p>
-            </div>
-            <div className="bg-red-50 dark:bg-red-900/30 rounded-lg p-4">
-              <p className="text-sm font-medium text-red-800 dark:text-red-200">Rejected</p>
-              <p className="text-2xl font-bold text-red-600">{getPosterStatusCount('rejected')}</p>
-            </div>
-            <div className="bg-emerald-50 dark:bg-emerald-900/30 rounded-lg p-4">
-              <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">Sent</p>
-              <p className="text-2xl font-bold text-emerald-600">{getPosterStatusCount('sent')}</p>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1">
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-              <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Create Campaign</h2>
-              <form onSubmit={handleCreateCampaign} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Campaign Name</label>
-                  <input
-                    type="text"
-                    value={campaignName}
-                    onChange={(e) => setCampaignName(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
-                    placeholder="e.g., Chennai Restaurants"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Upload Type</label>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setUploadType('url')}
-                      className={`flex-1 px-3 py-2 rounded-md ${uploadType === 'url' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}
-                    >
-                      Google Sheets URL
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setUploadType('file')}
-                      className={`flex-1 px-3 py-2 rounded-md ${uploadType === 'file' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}
-                    >
-                      Upload File
-                    </button>
-                  </div>
-                </div>
-                {uploadType === 'url' ? (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Google Sheets URL</label>
-                    <input
-                      type="url"
-                      value={sheetUrl}
-                      onChange={(e) => setSheetUrl(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
-                      placeholder="https://docs.google.com/spreadsheets/d/..."
-                      required={uploadType === 'url'}
-                    />
-                  </div>
-                ) : (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Upload Excel/CSV</label>
-                    <input
-                      type="file"
-                      accept=".xlsx,.xls,.csv"
-                      onChange={handleFileSelect}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
-                    />
-                  </div>
-                )}
+              <div className="flex overflow-hidden rounded-md border border-border">
                 <button
-                  type="submit"
-                  disabled={uploading}
-                  className="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md disabled:opacity-50 flex items-center justify-center gap-2"
+                  type="button"
+                  onClick={() => setUploadType('url')}
+                  className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                    uploadType === 'url' ? 'bg-accent text-bg' : 'bg-surface2 text-text-muted hover:text-text'
+                  }`}
                 >
-                  <Upload className="w-4 h-4" />
-                  {uploading ? 'Creating...' : 'Create Campaign'}
+                  Sheets URL
                 </button>
-              </form>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setUploadType('file')}
+                  className={`flex-1 border-l border-border px-3 py-2 text-xs font-medium transition-colors ${
+                    uploadType === 'file' ? 'bg-accent text-bg' : 'bg-surface2 text-text-muted hover:text-text'
+                  }`}
+                >
+                  Upload File
+                </button>
+              </div>
 
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Campaigns</h2>
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {campaigns.map((campaign) => (
-                  <div
+              {uploadType === 'url' ? (
+                <input
+                  type="url"
+                  value={sheetUrl}
+                  onChange={(e) => setSheetUrl(e.target.value)}
+                  placeholder="https://docs.google.com/spreadsheets/…"
+                  required={uploadType === 'url'}
+                  className="w-full rounded-md border border-border bg-surface2 px-3 py-2.5 text-sm text-text placeholder:text-text-dim outline-none transition-colors focus:border-accent"
+                />
+              ) : (
+                <div className="rounded-md border border-dashed border-border-strong bg-surface2 px-3 py-3 text-center transition-colors hover:border-accent/50">
+                  <label className="cursor-pointer text-xs text-text-muted">
+                    {selectedFile ? (
+                      <span className="text-text">{selectedFile.name}</span>
+                    ) : (
+                      <>Drop or <span className="text-accent">browse</span> .xlsx / .csv</>
+                    )}
+                    <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFileSelect} className="hidden" />
+                  </label>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={uploading}
+                className="flex w-full items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-bg transition-transform hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                {uploading ? 'Creating…' : 'Create campaign'}
+              </button>
+            </form>
+
+            <div className="mt-8 flex items-center justify-between">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-dim">Campaigns</p>
+              <span className="text-[11px] text-text-dim">{campaigns.length}</span>
+            </div>
+            <div className="mt-3 space-y-1.5">
+              {campaigns.map((campaign) => {
+                const isActive = selectedCampaign?.id === campaign.id;
+                return (
+                  <button
                     key={campaign.id}
                     onClick={() => handleSelectCampaign(campaign)}
-                    className={`p-3 rounded-md cursor-pointer border-2 transition-all ${
-                      selectedCampaign?.id === campaign.id
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                    className={`group flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2.5 text-left transition-colors ${
+                      isActive
+                        ? 'border-accent/40 bg-accent/[0.06]'
+                        : 'border-transparent hover:border-border hover:bg-surface2'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-medium text-gray-900 dark:text-white">{campaign.name}</h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{campaign.totalLeads} leads • {campaign.status}</p>
-                      </div>
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        campaign.status === 'completed' ? 'bg-green-100 text-green-800' :
-                        campaign.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
-                        campaign.status === 'failed' ? 'bg-red-100 text-red-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {campaign.status}
-                      </span>
+                    <div className="min-w-0">
+                      <p className={`truncate text-sm font-medium ${isActive ? 'text-accent' : 'text-text'}`}>{campaign.name}</p>
+                      <p className="text-[11px] text-text-dim">{campaign.totalLeads} leads</p>
                     </div>
-                  </div>
-                ))}
-              </div>
+                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium capitalize ${campaignStatusStyles[campaign.status] || 'bg-surface3 text-text-muted'}`}>
+                      {campaign.status}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
+        </aside>
 
-          <div className="lg:col-span-2">
-            {selectedCampaign ? (
-              <div className="space-y-6">
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{selectedCampaign.name}</h2>
-                      <p className="text-gray-600 dark:text-gray-400">{selectedCampaign.processedLeads} / {selectedCampaign.totalLeads} processed</p>
-                    </div>
-                    <div className="flex gap-2">
-                      {selectedCampaign.status === 'draft' || selectedCampaign.status === 'ready' || selectedCampaign.status === 'paused' ? (
-                        <button
-                          onClick={handleStartCampaign}
-                          disabled={loading}
-                          className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md flex items-center gap-2"
-                        >
-                          <Play className="w-4 h-4" />
-                          Start
-                        </button>
-                      ) : selectedCampaign.status === 'processing' ? (
-                        <button
-                          onClick={handlePauseCampaign}
-                          className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-md flex items-center gap-2"
-                        >
-                          <Pause className="w-4 h-4" />
-                          Pause
-                        </button>
-                      ) : null}
-                    </div>
+        {/* Main */}
+        <main className="min-w-0 flex-1 px-6 py-8 lg:px-10">
+          {/* Stat strip */}
+          <div className="mb-8 grid grid-cols-2 divide-x divide-border rounded-lg border border-border bg-surface md:grid-cols-4">
+            {[
+              { label: 'Total Leads', value: stats.total, icon: Users, tone: 'text-text' },
+              { label: 'Processing', value: stats.processing, icon: Clock3, tone: 'text-warning' },
+              { label: 'Completed', value: stats.completed, icon: CheckCircle2, tone: 'text-success' },
+              { label: 'Failed', value: stats.failed, icon: XCircle, tone: 'text-danger' },
+            ].map(({ label, value, icon: Icon, tone }) => (
+              <div key={label} className="flex items-center justify-between px-5 py-5 md:px-6">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.1em] text-text-dim">{label}</p>
+                  <p className={`font-display text-3xl ${tone}`}>{value}</p>
+                </div>
+                <Icon className={`h-5 w-5 ${tone} opacity-60`} strokeWidth={1.75} />
+              </div>
+            ))}
+          </div>
+
+          {selectedCampaign ? (
+            <div className="space-y-6">
+              {/* Campaign header */}
+              <div className="rounded-lg border border-border bg-surface p-6">
+                <div className="mb-5 flex items-start justify-between gap-4">
+                  <div>
+                    <h1 className="font-display text-2xl text-text">{selectedCampaign.name}</h1>
+                    <p className="mt-1 text-sm text-text-muted">
+                      {selectedCampaign.processedLeads} / {selectedCampaign.totalLeads} leads processed
+                    </p>
                   </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 mb-2">
-                    <div
-                      className="bg-blue-500 h-4 rounded-full transition-all"
-                      style={{ width: `${selectedCampaign.totalLeads ? (selectedCampaign.processedLeads / selectedCampaign.totalLeads) * 100 : 0}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                    <span>{selectedCampaign.successCount} generated</span>
-                    <span>{selectedCampaign.failedCount} failed</span>
-                    <span>{selectedCampaign.approvedCount} approved</span>
-                    <span>{selectedCampaign.rejectedCount} rejected</span>
-                  </div>
+                  {canStart ? (
+                    <button
+                      onClick={handleStartCampaign}
+                      disabled={loading}
+                      className="flex shrink-0 items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-bg transition-transform hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
+                    >
+                      <Play className="h-3.5 w-3.5" />
+                      Start
+                    </button>
+                  ) : selectedCampaign.status === 'processing' ? (
+                    <button
+                      onClick={handlePauseCampaign}
+                      className="flex shrink-0 items-center gap-2 rounded-md border border-border-strong bg-surface2 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-surface3"
+                    >
+                      <Pause className="h-3.5 w-3.5" />
+                      Pause
+                    </button>
+                  ) : null}
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-                  <div className="border-b border-gray-200 dark:border-gray-700">
-                    <nav className="flex -mb-px">
-                      <button
-                        onClick={() => setActiveTab('leads')}
-                        className={`px-6 py-3 border-b-2 text-sm font-medium ${
-                          activeTab === 'leads' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-                        }`}
-                      >
-                        Leads ({leads.length})
-                      </button>
-                      <button
-                        onClick={() => setActiveTab('posters')}
-                        className={`px-6 py-3 border-b-2 text-sm font-medium ${
-                          activeTab === 'posters' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-                        }`}
-                      >
-                        Posters ({posters.length})
-                      </button>
-                    </nav>
-                  </div>
+                <div className="mb-4 h-1.5 w-full overflow-hidden rounded-full bg-surface2">
+                  <div
+                    className="h-full rounded-full bg-accent transition-all duration-500"
+                    style={{ width: `${selectedCampaign.totalLeads ? (selectedCampaign.processedLeads / selectedCampaign.totalLeads) * 100 : 0}%` }}
+                  />
+                </div>
 
-                  <div className="p-6">
-                    {activeTab === 'leads' && (
+                <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-text-muted">
+                  <span><span className="text-success">{selectedCampaign.successCount}</span> generated</span>
+                  <span><span className="text-danger">{selectedCampaign.failedCount}</span> failed</span>
+                  <span><span className="text-accent">{selectedCampaign.approvedCount}</span> approved</span>
+                  <span><span className="text-text-dim">{selectedCampaign.rejectedCount}</span> rejected</span>
+                </div>
+              </div>
+
+              {/* Poster status strip */}
+              {posters.length > 0 && (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  {[
+                    { label: 'Ready for Review', status: 'ready_for_review', tone: 'text-warning' },
+                    { label: 'Approved', status: 'approved', tone: 'text-success' },
+                    { label: 'Regenerating', status: 'regenerating', tone: 'text-accent' },
+                    { label: 'Rejected', status: 'rejected', tone: 'text-danger' },
+                    { label: 'Sent', status: 'sent', tone: 'text-success' },
+                  ].map(({ label, status, tone }) => (
+                    <div key={status} className="rounded-lg border border-border bg-surface px-4 py-3">
+                      <p className="text-[11px] uppercase tracking-[0.08em] text-text-dim">{label}</p>
+                      <p className={`font-display text-2xl ${tone}`}>{getPosterStatusCount(status)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Tabs + content */}
+              <div className="overflow-hidden rounded-lg border border-border bg-surface">
+                <div className="flex border-b border-border">
+                  {(['leads', 'posters'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      className={`px-6 py-3.5 text-sm font-medium capitalize transition-colors ${
+                        activeTab === tab
+                          ? 'border-b-2 border-accent text-text'
+                          : 'border-b-2 border-transparent text-text-dim hover:text-text-muted'
+                      }`}
+                    >
+                      {tab} <span className="text-text-dim">({tab === 'leads' ? leads.length : posters.length})</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="p-6">
+                  {activeTab === 'leads' && (
+                    <div>
+                      {canEditOffer && (
+                        <p className="mb-4 text-xs text-text-dim">
+                          Edit the offer for each lead before starting. Leave blank to let AI generate one automatically.
+                        </p>
+                      )}
                       <div className="overflow-x-auto">
-                        {(selectedCampaign.status === 'draft' || selectedCampaign.status === 'ready') && (
-                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-                            Edit the Offer for each lead before starting. Leave blank to let AI generate one automatically.
-                          </p>
-                        )}
-                        <table className="w-full">
+                        <table className="w-full text-sm">
                           <thead>
-                            <tr className="border-b border-gray-200 dark:border-gray-700">
-                              <th className="text-left py-2 px-2 text-xs font-medium">Name</th>
-                              <th className="text-left py-2 px-2 text-xs font-medium">Business</th>
-                              <th className="text-left py-2 px-2 text-xs font-medium">Phone</th>
-                              <th className="text-left py-2 px-2 text-xs font-medium">Offer</th>
-                              <th className="text-left py-2 px-2 text-xs font-medium">Status</th>
+                            <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.08em] text-text-dim">
+                              <th className="py-2.5 pr-4 font-medium">Name</th>
+                              <th className="py-2.5 pr-4 font-medium">Business</th>
+                              <th className="py-2.5 pr-4 font-medium">Phone</th>
+                              <th className="py-2.5 pr-4 font-medium">Offer</th>
+                              <th className="py-2.5 pr-4 font-medium">Status</th>
                             </tr>
                           </thead>
                           <tbody>
                             {leads.map((lead) => (
-                              <tr key={lead.id} className="border-b border-gray-100 dark:border-gray-700">
-                                <td className="py-2 px-2 text-sm">{lead.name || '-'}</td>
-                                <td className="py-2 px-2 text-sm">{lead.businessName || '-'}</td>
-                                <td className="py-2 px-2 text-sm">{lead.phone || '-'}</td>
-                                <td className="py-2 px-2 text-sm">
-                                  {selectedCampaign.status === 'draft' || selectedCampaign.status === 'ready' ? (
+                              <tr key={lead.id} className="border-b border-border/60 last:border-0">
+                                <td className="py-2.5 pr-4 text-text">{lead.name || '—'}</td>
+                                <td className="py-2.5 pr-4 text-text-muted">{lead.businessName || '—'}</td>
+                                <td className="py-2.5 pr-4 text-text-muted">{lead.phone || '—'}</td>
+                                <td className="py-2.5 pr-4">
+                                  {canEditOffer ? (
                                     <input
                                       type="text"
                                       defaultValue={lead.offer || ''}
@@ -593,18 +598,14 @@ export default function Dashboard() {
                                           handleUpdateLeadOffer(lead.id, e.target.value);
                                         }
                                       }}
-                                      className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white"
+                                      className="w-full rounded border border-border bg-surface2 px-2 py-1.5 text-sm text-text placeholder:text-text-dim outline-none transition-colors focus:border-accent"
                                     />
                                   ) : (
-                                    lead.offer || '-'
+                                    <span className="text-text-muted">{lead.offer || '—'}</span>
                                   )}
                                 </td>
-                                <td className="py-2 px-2">
-                                  <span className={`px-2 py-1 text-xs rounded-full ${
-                                    lead.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                    lead.status === 'failed' ? 'bg-red-100 text-red-800' :
-                                    'bg-gray-100 text-gray-800'
-                                  }`}>
+                                <td className="py-2.5 pr-4">
+                                  <span className={`rounded px-2 py-0.5 text-[11px] font-medium capitalize ${leadStatusStyles[lead.status] || 'bg-surface3 text-text-muted'}`}>
                                     {lead.status}
                                   </span>
                                 </td>
@@ -613,172 +614,169 @@ export default function Dashboard() {
                           </tbody>
                         </table>
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    {activeTab === 'posters' && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {posters.map((poster) => (
-                          <div key={poster.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
-                            {poster.finalPosterUrl ? (
-                              <img
-                                src={posterImageSrc(poster)}
-                                alt={poster.lead?.businessName || 'Poster'}
-                                className="w-full h-48 object-cover cursor-pointer"
-                                onClick={() => setSelectedPoster(poster)}
-                              />
-                            ) : (
-                              <div className="w-full h-48 bg-gray-100 dark:bg-gray-700 flex items-center justify-center cursor-pointer" onClick={() => setSelectedPoster(poster)}>
-                                <ImageIcon className="w-12 h-12 text-gray-400" />
-                              </div>
-                            )}
-                            <div className="p-4">
-                              <div className="flex items-center justify-between mb-2">
-                                <h4 className="font-medium text-gray-900 dark:text-white text-sm">{poster.lead?.businessName || 'No business name'}</h4>
-                                <span className={`px-2 py-1 text-xs rounded-full ${statusStyles[poster.status] || 'bg-gray-100 text-gray-800'}`}>
-                                  {statusLabel[poster.status] || poster.status}
-                                </span>
-                              </div>
-                              {poster.qualityScore !== undefined && (
-                                <p className="text-xs text-gray-500 dark:text-gray-400">Quality: {poster.qualityScore}/100</p>
-                              )}
-                              <div className="mt-3">
-                                <button
-                                  onClick={() => setSelectedPoster(poster)}
-                                  className="w-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 text-gray-700 dark:text-gray-200 text-xs font-medium py-1.5 px-3 rounded-md flex items-center justify-center gap-1"
-                                >
-                                  <Eye className="w-3 h-3" />
-                                  Review
-                                </button>
-                              </div>
+                  {activeTab === 'posters' && (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {posters.map((poster) => (
+                        <div
+                          key={poster.id}
+                          className="group overflow-hidden rounded-lg border border-border bg-surface2 transition-colors hover:border-border-strong"
+                        >
+                          {poster.finalPosterUrl ? (
+                            <img
+                              src={posterImageSrc(poster)}
+                              alt={poster.lead?.businessName || 'Poster'}
+                              className="aspect-square w-full cursor-pointer object-cover"
+                              onClick={() => setSelectedPoster(poster)}
+                            />
+                          ) : (
+                            <div
+                              className="flex aspect-square w-full cursor-pointer items-center justify-center bg-surface3"
+                              onClick={() => setSelectedPoster(poster)}
+                            >
+                              <ImageIcon className="h-10 w-10 text-text-dim" strokeWidth={1.5} />
                             </div>
+                          )}
+                          <div className="p-4">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <h4 className="truncate text-sm font-medium text-text">{poster.lead?.businessName || 'No business name'}</h4>
+                              <span className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-medium ${posterStatusStyles[poster.status] || 'bg-surface3 text-text-muted'}`}>
+                                {posterStatusLabel[poster.status] || poster.status}
+                              </span>
+                            </div>
+                            {poster.qualityScore !== undefined && (
+                              <p className="text-[11px] text-text-dim">Quality: {poster.qualityScore}/100</p>
+                            )}
+                            <button
+                              onClick={() => setSelectedPoster(poster)}
+                              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text-muted transition-colors hover:border-accent/40 hover:text-text"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              Review
+                            </button>
                           </div>
-                        ))}
-                        {posters.length === 0 && (
-                          <div className="col-span-2 text-center py-12">
-                            <ImageIcon className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                            <p className="text-gray-500 dark:text-gray-400">No posters generated yet</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                        </div>
+                      ))}
+                      {posters.length === 0 && (
+                        <div className="col-span-full py-16 text-center">
+                          <ImageIcon className="mx-auto mb-3 h-10 w-10 text-text-dim" strokeWidth={1.5} />
+                          <p className="text-sm text-text-dim">No posters generated yet</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
-            ) : (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
-                <ImageIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">No Campaign Selected</h3>
-                <p className="text-gray-600 dark:text-gray-400">Create a new campaign or select an existing one to get started</p>
-              </div>
-            )}
-          </div>
-        </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-surface px-6 py-24 text-center">
+              <Sparkles className="mb-4 h-10 w-10 text-accent/60" strokeWidth={1.5} />
+              <h3 className="font-display text-xl text-text">No campaign selected</h3>
+              <p className="mt-2 max-w-sm text-sm text-text-dim">
+                Create a new campaign from the sidebar or select an existing one to review leads and posters.
+              </p>
+            </div>
+          )}
+        </main>
       </div>
 
+      {/* Poster review modal */}
       {selectedPoster && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setSelectedPoster(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Review Poster</h3>
-              <button onClick={() => setSelectedPoster(null)} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-                <X className="w-5 h-5" />
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => setSelectedPoster(null)}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border bg-surface shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <h3 className="font-display text-lg text-text">Review Poster</h3>
+              <button
+                onClick={() => setSelectedPoster(null)}
+                className="rounded-md p-1 text-text-dim transition-colors hover:bg-surface2 hover:text-text"
+              >
+                <X className="h-5 w-5" />
               </button>
             </div>
+
             <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div>
                   {selectedPoster.finalPosterUrl ? (
-                    <img src={posterImageSrc(selectedPoster)} alt="Poster preview" className="w-full rounded-lg shadow-lg" />
+                    <img src={posterImageSrc(selectedPoster)} alt="Poster preview" className="w-full rounded-lg border border-border shadow-lg" />
                   ) : (
-                    <div className="w-full aspect-square bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
-                      <ImageIcon className="w-16 h-16 text-gray-400" />
+                    <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-border bg-surface2">
+                      <ImageIcon className="h-14 w-14 text-text-dim" strokeWidth={1.5} />
                     </div>
                   )}
                 </div>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Business</p>
-                    <p className="text-lg font-semibold text-gray-900 dark:text-white">{selectedPoster.lead?.businessName || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Contact</p>
-                    <p className="text-sm text-gray-800 dark:text-gray-200">{selectedPoster.lead?.phone || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Address</p>
-                    <p className="text-sm text-gray-800 dark:text-gray-200">
-                      {selectedPoster.lead?.address || ''}{selectedPoster.lead?.city ? `, ${selectedPoster.lead.city}` : ''}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Offer</p>
-                    <p className="text-sm text-gray-800 dark:text-gray-200">{selectedPoster.lead?.offer || '-'}</p>
-                  </div>
-                  {selectedPoster.detectedFoodType && (
-                    <div>
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Cuisine</p>
-                      <p className="text-sm text-gray-800 dark:text-gray-200">{selectedPoster.detectedFoodType}</p>
-                    </div>
-                  )}
-                  {selectedPoster.theme && (
-                    <div>
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Theme</p>
-                      <p className="text-sm text-gray-800 dark:text-gray-200">{selectedPoster.theme}</p>
-                    </div>
-                  )}
+
+                <div className="space-y-3.5">
+                  <Field label="Business" value={selectedPoster.lead?.businessName} large />
+                  <Field label="Contact" value={selectedPoster.lead?.phone} />
+                  <Field
+                    label="Address"
+                    value={[selectedPoster.lead?.address, selectedPoster.lead?.city].filter(Boolean).join(', ')}
+                  />
+                  <Field label="Offer" value={selectedPoster.lead?.offer} />
+                  {selectedPoster.detectedFoodType && <Field label="Cuisine" value={selectedPoster.detectedFoodType} />}
+                  {selectedPoster.theme && <Field label="Theme" value={selectedPoster.theme} />}
                   {selectedPoster.qualityScore !== undefined && (
                     <div>
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Quality Score</p>
-                      <p className={`text-sm font-medium ${selectedPoster.qualityScore >= 70 ? 'text-green-600' : 'text-red-600'}`}>{selectedPoster.qualityScore}/100</p>
+                      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-dim">Quality Score</p>
+                      <p className={`text-sm font-medium ${selectedPoster.qualityScore >= 70 ? 'text-success' : 'text-danger'}`}>
+                        {selectedPoster.qualityScore}/100
+                      </p>
                     </div>
                   )}
                   <div>
-                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</p>
-                    <span className={`px-2 py-1 text-xs rounded-full ${statusStyles[selectedPoster.status] || 'bg-gray-100 text-gray-800'}`}>
-                      {statusLabel[selectedPoster.status] || selectedPoster.status}
+                    <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-text-dim">Status</p>
+                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${posterStatusStyles[selectedPoster.status] || 'bg-surface3 text-text-muted'}`}>
+                      {posterStatusLabel[selectedPoster.status] || selectedPoster.status}
                     </span>
                   </div>
 
                   {selectedPoster.status === 'ready_for_review' && (
-                    <div className="pt-4 space-y-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleApprovePoster(selectedPoster)}
-                          disabled={actionLoading}
-                          className="flex-1 bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-md flex items-center justify-center gap-2 disabled:opacity-50"
-                        >
-                          <ThumbsUp className="w-4 h-4" />
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => handleRejectPoster(selectedPoster)}
-                          disabled={actionLoading}
-                          className="flex-1 bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-md flex items-center justify-center gap-2 disabled:opacity-50"
-                        >
-                          <ThumbsDown className="w-4 h-4" />
-                          Reject
-                        </button>
-                      </div>
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        onClick={() => handleApprovePoster(selectedPoster)}
+                        disabled={actionLoading}
+                        className="flex flex-1 items-center justify-center gap-2 rounded-md bg-success px-4 py-2 text-sm font-semibold text-bg transition-transform hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
+                      >
+                        <ThumbsUp className="h-4 w-4" />
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => handleRejectPoster(selectedPoster)}
+                        disabled={actionLoading}
+                        className="flex flex-1 items-center justify-center gap-2 rounded-md bg-danger px-4 py-2 text-sm font-semibold text-white transition-transform hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
+                      >
+                        <ThumbsDown className="h-4 w-4" />
+                        Reject
+                      </button>
                     </div>
                   )}
 
-                  {(selectedPoster.status === 'ready_for_review' || selectedPoster.status === 'rejected' || selectedPoster.status === 'approved' || selectedPoster.status === 'failed') && (
-                    <div className="pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
-                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Regenerate</p>
+                  {(['ready_for_review', 'rejected', 'approved', 'failed'].includes(selectedPoster.status)) && (
+                    <div className="space-y-2 border-t border-border pt-3.5">
+                      <p className="text-xs font-medium text-text-muted">Regenerate</p>
                       <textarea
                         value={regenerateInstruction}
                         onChange={(e) => setRegenerateInstruction(e.target.value)}
-                        placeholder="Optional instruction, e.g., Make the offer more prominent, use a premium style..."
+                        placeholder="Optional instruction — e.g. make the offer more prominent, use a premium style…"
                         rows={2}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white text-sm"
+                        className="w-full rounded-md border border-border bg-surface2 px-3 py-2 text-sm text-text placeholder:text-text-dim outline-none transition-colors focus:border-accent"
                       />
                       <button
                         onClick={() => handleRegeneratePoster(selectedPoster)}
                         disabled={actionLoading}
-                        className="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 px-4 rounded-md flex items-center justify-center gap-2 disabled:opacity-50"
+                        className="flex w-full items-center justify-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-4 py-2 text-sm font-semibold text-accent transition-colors hover:bg-accent/20 disabled:opacity-50"
                       >
-                        <RefreshCcw className="w-4 h-4" />
-                        {actionLoading ? 'Processing...' : 'Regenerate'}
+                        <RefreshCcw className={`h-4 w-4 ${actionLoading ? 'animate-spin' : ''}`} />
+                        {actionLoading ? 'Processing…' : 'Regenerate'}
                       </button>
                     </div>
                   )}
@@ -788,6 +786,15 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function Field({ label, value, large }: { label: string; value?: string; large?: boolean }) {
+  return (
+    <div>
+      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-dim">{label}</p>
+      <p className={large ? 'text-lg font-medium text-text' : 'text-sm text-text-muted'}>{value || '—'}</p>
     </div>
   );
 }
