@@ -157,16 +157,24 @@ const generatePosterWorker = new Worker(
         data: { status: 'generating' },
       });
 
-      // Generate poster prompt
-      const posterPrompt = await promptGenerator.generatePrompt({
-        businessName: lead.businessName || undefined,
-        name: lead.name || undefined,
-        offer: lead.offer || undefined,
-        address: lead.address || undefined,
-        phone: lead.phone || undefined,
-        restaurantType: lead.restaurantType || undefined,
-        favoriteItem: lead.favoriteItem || undefined,
-      });
+      // Generate poster prompt. If this is a regeneration with a user
+      // instruction, posterApprovalService.regeneratePoster already stored
+      // an instruction-augmented prompt on the poster row (prompt field
+      // contains "Additional user instruction: ...") - reuse that verbatim
+      // instead of silently discarding the instruction by rebuilding a
+      // fresh prompt from the lead's raw fields.
+      const hasInstruction = poster.prompt?.includes('Additional user instruction:');
+      const posterPrompt = hasInstruction
+        ? { prompt: poster.prompt!, theme: poster.theme || 'Premium black and gold', foodType: poster.detectedFoodType || 'General' }
+        : await promptGenerator.generatePrompt({
+            businessName: lead.businessName || undefined,
+            name: lead.name || undefined,
+            offer: lead.offer || undefined,
+            address: lead.address || undefined,
+            phone: lead.phone || undefined,
+            restaurantType: lead.restaurantType || undefined,
+            favoriteItem: lead.favoriteItem || undefined,
+          });
 
       // Generate background image
       const generatedImage = await imageGenerator.generateImage(posterPrompt.prompt);
