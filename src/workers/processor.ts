@@ -160,10 +160,12 @@ const generatePosterWorker = new Worker(
       // Generate poster prompt. If this is a regeneration with a user
       // instruction, posterApprovalService.regeneratePoster already stored
       // an instruction-augmented prompt on the poster row (prompt field
-      // contains "IMPORTANT OVERRIDE INSTRUCTION") - reuse that verbatim
+      // starts with the "[INSTRUCTION-REGEN]" marker - kept stable across
+      // all instruction-prompt wording variants specifically so this check
+      // can't silently drift out of sync again) - reuse that verbatim
       // instead of silently discarding the instruction by rebuilding a
       // fresh prompt from the lead's raw fields.
-      const hasInstruction = poster.prompt?.includes('IMPORTANT OVERRIDE INSTRUCTION');
+      const hasInstruction = poster.prompt?.includes('[INSTRUCTION-REGEN]');
       const posterPrompt = hasInstruction
         ? { prompt: poster.prompt!, theme: poster.theme || 'Premium black and gold', foodType: poster.detectedFoodType || 'General' }
         : await promptGenerator.generatePrompt({
@@ -176,8 +178,26 @@ const generatePosterWorker = new Worker(
             favoriteItem: lead.favoriteItem || undefined,
           });
 
-      // Generate background image
-      const generatedImage = await imageGenerator.generateImage(posterPrompt.prompt);
+      // Generate background image. On an instruction-driven regenerate,
+      // pass the PREVIOUS raw AI background (not the final composited
+      // poster, which has text/frame/ribbon baked in) as a reference image
+      // so Gemini performs a genuine edit grounded in what's actually on
+      // screen - instructions phrased as deltas ("change X to Y") are
+      // meaningless to a model that has never seen the current image.
+      const referenceImageUrl = hasInstruction && poster.backgroundImageUrl ? poster.backgroundImageUrl : undefined;
+      const generatedImage = await imageGenerator.generateImage(posterPrompt.prompt, '1024x1024', referenceImageUrl);
+
+      // Persist the raw background separately from the final composited
+      // poster so a future regenerate can use it as an edit reference.
+      const { put: putBlob } = await import('@vercel/blob');
+      const rawBgRes = await fetch(generatedImage.url);
+      const rawBgBuffer = Buffer.from(await rawBgRes.arrayBuffer());
+      const rawBgBlob = await putBlob(`posters/${posterId}-bg.jpg`, rawBgBuffer, {
+        access: 'public',
+        contentType: 'image/jpeg',
+        addRandomSuffix: false,
+        allowOverwrite: true,
+      });
 
       // Compose final poster
       const posterBuffer = await posterComposer.composePoster({
@@ -205,8 +225,7 @@ const generatePosterWorker = new Worker(
       const filePath = path.join(uploadsDir, fileName);
       await fs.writeFile(filePath, posterBuffer);
 
-      const { put } = await import('@vercel/blob');
-      const blob = await put(`posters/${fileName}`, posterBuffer, {
+      const blob = await putBlob(`posters/${fileName}`, posterBuffer, {
         access: 'public',
         contentType: 'image/jpeg',
         addRandomSuffix: false,
@@ -221,6 +240,7 @@ const generatePosterWorker = new Worker(
         data: {
           status: 'ready_for_review',
           finalPosterUrl: blob.url,
+          backgroundImageUrl: rawBgBlob.url,
           prompt: posterPrompt.prompt,
           theme: posterPrompt.theme,
           detectedFoodType: posterPrompt.foodType,

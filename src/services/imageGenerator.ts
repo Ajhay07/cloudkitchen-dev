@@ -20,15 +20,15 @@ export class ImageGenerator {
     });
   }
 
-  async generateImage(prompt: string, size: string = '1024x1024'): Promise<GeneratedImage> {
+  async generateImage(prompt: string, size: string = '1024x1024', referenceImageUrl?: string): Promise<GeneratedImage> {
     try {
-      logger.info('image', `Generating image with provider: ${this.provider}`, { prompt: prompt.substring(0, 100) });
+      logger.info('image', `Generating image with provider: ${this.provider}`, { prompt: prompt.substring(0, 100), hasReference: !!referenceImageUrl });
 
       switch (this.provider) {
         case 'openai':
           return this.generateWithOpenAI(prompt, size);
         case 'gemini':
-          return this.generateWithGemini(prompt, size);
+          return this.generateWithGemini(prompt, size, referenceImageUrl);
         case 'stability':
           return this.generateWithStability(prompt, size);
         case 'fal':
@@ -78,10 +78,28 @@ export class ImageGenerator {
    * base64 image data (not a hosted URL) — encoded here as a data: URI,
    * same pattern already used by generateWithStability above.
    */
-  private async generateWithGemini(prompt: string, size: string): Promise<GeneratedImage> {
+  /**
+   * When referenceImageUrl is given (a regenerate on an existing poster),
+   * this fetches that image and includes it as an inline image part
+   * alongside the text instruction, so gemini-2.5-flash-image performs a
+   * genuine image EDIT grounded in what's actually on screen, instead of
+   * blind text-to-image generation. Instructions phrased as deltas relative
+   * to the current image ("change X to Y", "make the sauce redder") are
+   * meaningless to a model that has never seen the current image - it was
+   * previously guessing at what "X" even referred to.
+   */
+  private async generateWithGemini(prompt: string, size: string, referenceImageUrl?: string): Promise<GeneratedImage> {
     try {
       const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
       if (!apiKey) throw new Error('GOOGLE_GEMINI_API_KEY not configured');
+
+      const requestParts: Array<Record<string, unknown>> = [];
+
+      if (referenceImageUrl) {
+        const { mimeType, data } = await this.fetchImageAsBase64(referenceImageUrl);
+        requestParts.push({ inlineData: { mimeType, data } });
+      }
+      requestParts.push({ text: prompt });
 
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`,
@@ -89,7 +107,7 @@ export class ImageGenerator {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            contents: [{ role: 'user', parts: requestParts }],
           }),
         }
       );
@@ -100,7 +118,7 @@ export class ImageGenerator {
       }
 
       const parts = data.candidates?.[0]?.content?.parts ?? [];
-      const imagePart = parts.find((p: any) => p.inlineData?.data);
+      const imagePart: any = parts.find((p: any) => p.inlineData?.data);
       if (!imagePart) {
         throw new Error(`Gemini response contained no image data: ${JSON.stringify(data).slice(0, 300)}`);
       }
@@ -119,6 +137,17 @@ export class ImageGenerator {
       logger.error('image', 'Gemini image generation failed', { error });
       throw error;
     }
+  }
+
+  private async fetchImageAsBase64(url: string): Promise<{ mimeType: string; data: string }> {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch reference image (${response.status})`);
+    }
+    const mimeType = response.headers.get('content-type') || 'image/jpeg';
+    const arrayBuffer = await response.arrayBuffer();
+    const data = Buffer.from(arrayBuffer).toString('base64');
+    return { mimeType, data };
   }
 
   private async generateWithStability(prompt: string, size: string): Promise<GeneratedImage> {

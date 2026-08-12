@@ -149,8 +149,26 @@ export class PosterApprovalService {
       },
       { forCustomInstruction: !!instruction }
     );
+    // When a raw background from a previous generation exists, it gets
+    // passed to Gemini alongside this prompt as an actual reference image
+    // (see imageGenerator.generateWithGemini) - so the wording here must
+    // explicitly frame this as an EDIT of that provided image. Phrasing it
+    // as a fresh "create a background" brief (even with the image attached)
+    // let the model treat the reference as loose inspiration rather than a
+    // literal edit target, and the requested change silently didn't apply.
+    // [INSTRUCTION-REGEN] is a stable marker that MUST appear in every
+    // instruction-driven prompt variant below, regardless of wording -
+    // processor.ts's generate-poster worker greps for it to decide whether
+    // to reuse this exact prompt verbatim or rebuild a fresh one from the
+    // lead's fields. A previous edit changed the reference-image wording
+    // without keeping this marker, which silently made the worker discard
+    // the instruction and reference image entirely and fall back to a
+    // fresh prompt (reverting to the lead's original food item).
+    const hasReferenceImage = !!poster.backgroundImageUrl;
     const promptWithInstruction = instruction
-      ? `IMPORTANT OVERRIDE INSTRUCTION - this is a mandatory requirement, not a suggestion, and takes absolute priority over every other line in this prompt, including composition/layout/subject details below: ${instruction}\n\n${basePrompt}`
+      ? hasReferenceImage
+        ? `[INSTRUCTION-REGEN] You are given a reference image above. Edit that EXACT image by applying this change, keeping everything else in the image identical: ${instruction}\n\nDo not generate a new, different scene - modify the provided image directly.\n\n${basePrompt}`
+        : `[INSTRUCTION-REGEN] IMPORTANT OVERRIDE INSTRUCTION - this is a mandatory requirement, not a suggestion, and takes absolute priority over every other line in this prompt, including composition/layout/subject details below: ${instruction}\n\n${basePrompt}`
       : basePrompt;
 
     // Update poster with instruction and queue regeneration through existing pipeline
