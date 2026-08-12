@@ -288,6 +288,20 @@ export default function Dashboard() {
     }
   };
 
+  const handleUpdateLeadBusinessName = async (leadId: string, businessName: string) => {
+    if (!selectedCampaign) return;
+    setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, businessName } : l)));
+    try {
+      await fetch(`/api/campaigns/${selectedCampaign.id}/leads`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId, businessName }),
+      });
+    } catch (error) {
+      logger.error('Failed to update lead business name', { error });
+    }
+  };
+
   const handleApprovePoster = async (poster: Poster) => {
     setActionLoading(true);
     try {
@@ -347,7 +361,6 @@ export default function Dashboard() {
 
   const getPosterStatusCount = (status: string) => posters.filter((p) => p.status === status).length;
   const canStart = selectedCampaign && ['draft', 'ready', 'paused'].includes(selectedCampaign.status);
-  const canEditOffer = selectedCampaign && ['draft', 'ready'].includes(selectedCampaign.status);
 
   return (
     <div className="min-h-screen bg-bg text-text font-body">
@@ -565,11 +578,9 @@ export default function Dashboard() {
                 <div className="p-6">
                   {activeTab === 'leads' && (
                     <div>
-                      {canEditOffer && (
-                        <p className="mb-4 text-xs text-text-dim">
-                          Edit the offer for each lead before starting. Leave blank to let AI generate one automatically.
-                        </p>
-                      )}
+                      <p className="mb-4 text-xs text-text-dim">
+                        Edit the business name (shown as the poster title) or offer for any lead, then use Regenerate on its poster to apply the change. Leave offer blank on a new lead to let AI generate one automatically.
+                      </p>
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
@@ -585,24 +596,32 @@ export default function Dashboard() {
                             {leads.map((lead) => (
                               <tr key={lead.id} className="border-b border-border/60 last:border-0">
                                 <td className="py-2.5 pr-4 text-text">{lead.name || '—'}</td>
-                                <td className="py-2.5 pr-4 text-text-muted">{lead.businessName || '—'}</td>
+                                <td className="py-2.5 pr-4">
+                                  <input
+                                    type="text"
+                                    defaultValue={lead.businessName || ''}
+                                    placeholder="Business name shown on poster"
+                                    onBlur={(e) => {
+                                      if (e.target.value !== (lead.businessName || '')) {
+                                        handleUpdateLeadBusinessName(lead.id, e.target.value);
+                                      }
+                                    }}
+                                    className="w-full rounded border border-border bg-surface2 px-2 py-1.5 text-sm text-text placeholder:text-text-dim outline-none transition-colors focus:border-accent"
+                                  />
+                                </td>
                                 <td className="py-2.5 pr-4 text-text-muted">{lead.phone || '—'}</td>
                                 <td className="py-2.5 pr-4">
-                                  {canEditOffer ? (
-                                    <input
-                                      type="text"
-                                      defaultValue={lead.offer || ''}
-                                      placeholder="e.g. Flat 25% OFF"
-                                      onBlur={(e) => {
-                                        if (e.target.value !== (lead.offer || '')) {
-                                          handleUpdateLeadOffer(lead.id, e.target.value);
-                                        }
-                                      }}
-                                      className="w-full rounded border border-border bg-surface2 px-2 py-1.5 text-sm text-text placeholder:text-text-dim outline-none transition-colors focus:border-accent"
-                                    />
-                                  ) : (
-                                    <span className="text-text-muted">{lead.offer || '—'}</span>
-                                  )}
+                                  <input
+                                    type="text"
+                                    defaultValue={lead.offer || ''}
+                                    placeholder="e.g. Flat 25% OFF"
+                                    onBlur={(e) => {
+                                      if (e.target.value !== (lead.offer || '')) {
+                                        handleUpdateLeadOffer(lead.id, e.target.value);
+                                      }
+                                    }}
+                                    className="w-full rounded border border-border bg-surface2 px-2 py-1.5 text-sm text-text placeholder:text-text-dim outline-none transition-colors focus:border-accent"
+                                  />
                                 </td>
                                 <td className="py-2.5 pr-4">
                                   <span className={`rounded px-2 py-0.5 text-[11px] font-medium capitalize ${leadStatusStyles[lead.status] || 'bg-surface3 text-text-muted'}`}>

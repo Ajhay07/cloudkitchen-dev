@@ -1,6 +1,9 @@
 import prisma from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import queueService from '@/services/queue';
+import { PosterPromptGenerator } from '@/services/posterPromptGenerator';
+
+const promptGenerator = new PosterPromptGenerator();
 
 export class PosterApprovalService {
   async approvePoster(posterId: string) {
@@ -127,13 +130,22 @@ export class PosterApprovalService {
       instruction: instruction || undefined,
     });
 
-    // Store instruction in prompt for next generation. Appending the
-    // instruction to the end of a prompt that already mentions the
-    // original food item twice ("Food Item: X" / "photography of X")
-    // let the AI anchor on the earlier, repeated text instead of the
-    // override - so this leads with an explicit, high-priority directive
-    // instead of a low-priority afterthought.
-    const basePrompt = poster.prompt || '';
+    // Always rebuild a clean base prompt from the lead's fields rather than
+    // reusing poster.prompt - that field accumulates every previous
+    // instruction verbatim, so a second regenerate would stack a new
+    // override on top of the last one (two conflicting "IMPORTANT OVERRIDE
+    // INSTRUCTION" blocks fighting each other, plus the stale food item
+    // still mentioned underneath). Each regenerate call starts fresh and
+    // applies only the instruction given this time.
+    const { prompt: basePrompt } = await promptGenerator.generatePrompt({
+      businessName: lead.businessName || undefined,
+      name: lead.name || undefined,
+      offer: lead.offer || undefined,
+      address: lead.address || undefined,
+      phone: lead.phone || undefined,
+      restaurantType: lead.restaurantType || undefined,
+      favoriteItem: lead.favoriteItem || undefined,
+    });
     const promptWithInstruction = instruction
       ? `IMPORTANT OVERRIDE INSTRUCTION (this takes priority over anything below): ${instruction}\n\n${basePrompt}`
       : basePrompt;

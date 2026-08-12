@@ -25,15 +25,19 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { leadId, offer } = await request.json();
+    const { leadId, offer, businessName } = await request.json();
 
     if (!leadId) {
       return NextResponse.json({ error: 'leadId is required' }, { status: 400 });
     }
 
+    const data: Record<string, string> = {};
+    if (offer !== undefined) data.offer = offer;
+    if (businessName !== undefined) data.businessName = businessName;
+
     const lead = await prisma.lead.update({
       where: { id: leadId, campaignId: params.id },
-      data: { offer },
+      data,
     });
 
     return NextResponse.json(lead);
