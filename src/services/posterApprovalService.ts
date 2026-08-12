@@ -127,10 +127,15 @@ export class PosterApprovalService {
       instruction: instruction || undefined,
     });
 
-    // Store instruction in prompt for next generation
+    // Store instruction in prompt for next generation. Appending the
+    // instruction to the end of a prompt that already mentions the
+    // original food item twice ("Food Item: X" / "photography of X")
+    // let the AI anchor on the earlier, repeated text instead of the
+    // override - so this leads with an explicit, high-priority directive
+    // instead of a low-priority afterthought.
     const basePrompt = poster.prompt || '';
     const promptWithInstruction = instruction
-      ? `${basePrompt}\n\nAdditional user instruction: ${instruction}`
+      ? `IMPORTANT OVERRIDE INSTRUCTION (this takes priority over anything below): ${instruction}\n\n${basePrompt}`
       : basePrompt;
 
     // Update poster with instruction and queue regeneration through existing pipeline

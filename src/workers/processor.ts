@@ -160,10 +160,10 @@ const generatePosterWorker = new Worker(
       // Generate poster prompt. If this is a regeneration with a user
       // instruction, posterApprovalService.regeneratePoster already stored
       // an instruction-augmented prompt on the poster row (prompt field
-      // contains "Additional user instruction: ...") - reuse that verbatim
+      // contains "IMPORTANT OVERRIDE INSTRUCTION") - reuse that verbatim
       // instead of silently discarding the instruction by rebuilding a
       // fresh prompt from the lead's raw fields.
-      const hasInstruction = poster.prompt?.includes('Additional user instruction:');
+      const hasInstruction = poster.prompt?.includes('IMPORTANT OVERRIDE INSTRUCTION');
       const posterPrompt = hasInstruction
         ? { prompt: poster.prompt!, theme: poster.theme || 'Premium black and gold', foodType: poster.detectedFoodType || 'General' }
         : await promptGenerator.generatePrompt({
